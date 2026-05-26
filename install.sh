@@ -149,7 +149,7 @@ set_hostname() {
 
 user_setup() {
     echo "Root setup..."
-    chroot /mnt passwd root
+    chroot $MOUNT_POINT passwd root
     echo "User setup..."
     read -p "Enter username: " USERNAME
     if [ -z "$USERNAME" ]; then
@@ -169,24 +169,24 @@ chroot_setup() {
 
 packages_install() {
     echo "Installing base packages..."
-    chroot /mnt flux update
+    chroot $MOUNT_POINT flux update
     for pkg in $PACKAGES; do
-        chroot /mnt flux install "$pkg"
+        chroot $MOUNT_POINT flux install "$pkg"
     done
 }
 
 bootloader_install() {
     echo "Installing GRUB..."
-    chroot /mnt flux install grub
-    chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Kira Linux"
-    chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+    chroot $MOUNT_POINT flux install grub
+    chroot $MOUNT_POINT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Kira Linux"
+    chroot $MOUNT_POINT grub-mkconfig -o /boot/grub/grub.cfg
 }
 
 chroot_cleanup() {
     echo "Unbinding Virtual File Systems..."
-    umount /mnt/sys
-    umount /mnt/proc
-    umount /mnt/dev
+    umount $MOUNT_POINT/sys
+    umount $MOUNT_POINT/proc
+    umount $MOUNT_POINT/dev
 }
 
 unmount_partition() {

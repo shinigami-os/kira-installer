@@ -155,15 +155,15 @@ user_setup() {
     if [ -z "$USERNAME" ]; then
         USERNAME="kira"
     fi
-    chroot /mnt useradd -m -s /bin/zsh "$USERNAME"
-    chroot /mnt passwd "$USERNAME"
+    chroot $MOUNT_POINT useradd -m -s /bin/zsh "$USERNAME"
+    chroot $MOUNT_POINT passwd "$USERNAME"
 }
 
 chroot_setup() {
     echo "Binding Virtual File Systems..."
-    mount --bind /dev /mnt/dev
-    mount --bind /proc /mnt/proc
-    mount --bind /sys /mnt/sys
+    mount --bind /dev $MOUNT_POINT/dev
+    mount --bind /proc $MOUNT_POINT/proc
+    mount --bind /sys $MOUNT_POINT/sys
 }
 
 

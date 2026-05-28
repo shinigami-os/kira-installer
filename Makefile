@@ -3,7 +3,7 @@ KIRA_BASE_STAMP ?= ../kira-base/build/stamps/sysroot.stamp
 KIRA_BASE_SYSROOT ?= ../kira-base/build/sysroot
 KIRA_BASE_INITRAMFS ?= ../kira-base/build/initramfs.cpio.gz
 
-.PHONY: all clean
+.PHONY: all clean qemu
 
 all: build/kira-base.iso
 
@@ -68,3 +68,11 @@ build/kira-base.iso: build/installer-initramfs.cpio.gz $(KERNEL) build/BOOTX64.E
 		-no-emul-boot \
 		-append_partition 2 0xef build/efi.img \
 		build/iso-root/
+
+qemu: build/kira-base.iso
+	qemu-system-x86_64 \
+		-drive file=build/kira-base.iso,format=raw,if=virtio \
+		-bios /usr/share/ovmf/OVMF.fd \
+		-m 1G \
+		-nographic \
+		-serial mon:stdio

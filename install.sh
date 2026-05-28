@@ -7,7 +7,6 @@ ESP_PART=""
 ROOT_PART=""
 SWAP_PART=""
 MOUNT_POINT="/mnt"
-PACKAGES="make zlib gcc binutils flex bison pkgconf util-linux"
 TARBALL="/installer/kira-base.tar.gz"
 
 check_root() {
@@ -166,15 +165,6 @@ chroot_setup() {
     mount --bind /sys $MOUNT_POINT/sys
 }
 
-
-packages_install() {
-    echo "Installing base packages..."
-    chroot $MOUNT_POINT flux update
-    for pkg in $PACKAGES; do
-        chroot $MOUNT_POINT flux install "$pkg"
-    done
-}
-
 bootloader_install() {
     echo "Installing GRUB..."
     chroot $MOUNT_POINT flux install grub
@@ -222,7 +212,6 @@ main() {
     set_hostname
     user_setup
     chroot_setup
-    packages_install
     bootloader_install
     chroot_cleanup
     unmount_partition

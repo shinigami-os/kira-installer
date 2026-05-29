@@ -6,7 +6,10 @@ TARGET_DISK=""
 ESP_PART=""
 ROOT_PART=""
 SWAP_PART=""
+PARTITION_MODE=""
+ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
+PACKAGES="make zlib gcc binutils flex bison pkgconf util-linux os-prober grub"
 TARBALL="/installer/kira-base.tar.gz"
 
 check_root() {
@@ -36,6 +39,17 @@ network_setup() {
     set -e
 }
 
+select_partition_mode() {
+    echo "Partition mode selection..."
+    read -p "Enter 1 for guided - whole disk | 2 for guided - use free space | 3 for full manual (not implemented): " PARTITION_MODE
+    case "$PARTITION_MODE" in
+        1) select_disk && confirm_disk && write_partition ;;
+        2) select_disk && confirm_free_space && format_free_space ;;
+        3) echo "Full manual mode not implemented yet. Aborting."; exit 1 ;;
+        *) echo "Invalid selection. Aborting."; exit 1 ;;
+    esac
+}
+
 select_disk() {
     echo "Disk selection..."
     lsblk -d -o NAME,SIZE,MODEL
@@ -56,7 +70,90 @@ confirm_disk() {
     fi
 }
 
-select_partition() {
+confirm_free_space() {
+    echo "/!\ Confirm ? The free space on $TARGET_DISK will be used. /!\ "
+    read -p "Confirm (type 'yes' to confirm): " CONFIRM
+    if [ "$CONFIRM" != "yes" ]; then
+        echo "Aborting."
+        exit 1
+    fi
+}
+
+find_esp() {
+    echo "Finding ESP partition..."
+    ESP_NUM=$(parted -s "$TARGET_DISK" print | awk '/esp/{print $1}' | head -1)
+    if [ -n "$ESP_NUM" ]; then
+        case "$TARGET_DISK" in
+            *[0-9]) PART_PREFIX="${TARGET_DISK}p" ;;
+            *)      PART_PREFIX="${TARGET_DISK}" ;;
+        esac
+        ESP_PART="${PART_PREFIX}${ESP_NUM}"
+        return
+    fi
+    TARGET_SHORT=$(basename "$TARGET_DISK")
+    for i in $(lsblk -d -o NAME --noheadings); do
+        [ "$i" = "$TARGET_SHORT" ] && continue
+        ESP_NUM=$(parted -s "/dev/$i" print 2>/dev/null | awk '/esp/{print $1}' | head -1)
+        if [ -n "$ESP_NUM" ]; then
+            ESP_EXTERNAL=1
+            case "/dev/$i" in
+                *[0-9]) EXT_PREFIX="/dev/${i}p" ;;
+                *)      EXT_PREFIX="/dev/$i" ;;
+            esac
+            ESP_PART="${EXT_PREFIX}${ESP_NUM}"
+            return
+        fi
+    done
+    read -p "ESP partition not found. Enter full path (e.g. /dev/sda1) or press enter to abort: " ESP_PART
+    if [ -z "$ESP_PART" ]; then
+        echo "Aborting."
+        exit 1
+    fi
+    ESP_EXTERNAL=1
+}
+
+format_free_space() {
+    FREE=$(parted -s "$TARGET_DISK" unit MiB print free \
+        | grep "Free Space" \
+        | awk '{gsub(/MiB/,""); print $1, $2, $3}' \
+        | sort -k3 -n \
+        | tail -1)
+    START=$(echo "$FREE" | awk '{print $1}')
+    END=$(echo "$FREE" | awk '{print $2}')
+    SIZE=$(echo "$FREE" | awk '{print $3}')
+
+    if [ -z "$START" ]; then
+        echo "No free space found on $TARGET_DISK. Aborting."
+        exit 1
+    fi
+    if [ $((END - START)) -lt 100000 ]; then
+        echo "Not enough free space on $TARGET_DISK. Aborting."
+        exit 1
+    fi
+
+    LAST_PART=$(parted -s "$TARGET_DISK" print | awk '/^ [0-9]/{print $1}' | sort -n | tail -1)
+
+    read -p "Do you want a swap partition ? (y/n): " CONFIRM_SWAP
+
+    echo "Partitioning..."
+    case "$TARGET_DISK" in
+        *[0-9]) PART_PREFIX="${TARGET_DISK}p" ;;
+        *)      PART_PREFIX="${TARGET_DISK}" ;;
+    esac
+    if [ "$CONFIRM_SWAP" = "y" ]; then
+        read -p "Enter swap size (in MiB): " SWAP_SIZE
+        parted -s "$TARGET_DISK" mkpart swap linux-swap "${START}MiB" "$((START + SWAP_SIZE))MiB"
+        SWAP_PART="${PART_PREFIX}$((LAST_PART + 1))"
+        parted -s "$TARGET_DISK" mkpart root ext4 "$((START + SWAP_SIZE))MiB" "${END}MiB"
+        ROOT_PART="${PART_PREFIX}$((LAST_PART + 2))"
+    else
+        parted -s "$TARGET_DISK" mkpart root ext4 "${START}MiB" "${END}MiB"
+        ROOT_PART="${PART_PREFIX}$((LAST_PART + 1))"
+    fi
+    find_esp
+}
+
+write_partition() {
     echo "Partition selection..."
     parted -s "$TARGET_DISK" mklabel gpt
     parted -s "$TARGET_DISK" mkpart ESP fat32 1MiB 513MiB
@@ -84,8 +181,10 @@ select_partition() {
 
 format_partition() {
     echo "Partition formatting..."
-    mkfs.fat -F 32 "$ESP_PART"
-    mkfs.ext4 "$ROOT_PART"
+    if [ "$PARTITION_MODE" = "1" ]; then
+        mkfs.fat -F 32 "$ESP_PART"
+    fi
+    mkfs.ext4 -F "$ROOT_PART"
     if [ "$CONFIRM_SWAP" = "y" ]; then
         mkswap "$SWAP_PART"
     fi
@@ -148,14 +247,18 @@ set_hostname() {
 
 user_setup() {
     echo "Root setup..."
-    chroot $MOUNT_POINT passwd root
+    read -s -p "Enter root password: " ROOT_PASS
+    echo
+    echo "root:$ROOT_PASS" | chroot $MOUNT_POINT chpasswd
     echo "User setup..."
     read -p "Enter username: " USERNAME
     if [ -z "$USERNAME" ]; then
         USERNAME="kira"
     fi
     chroot $MOUNT_POINT useradd -m -s /bin/zsh "$USERNAME"
-    chroot $MOUNT_POINT passwd "$USERNAME"
+    read -s -p "Enter password for $USERNAME: " USER_PASS
+    echo
+    echo "$USERNAME:$USER_PASS" | chroot $MOUNT_POINT chpasswd
 }
 
 chroot_setup() {
@@ -165,11 +268,31 @@ chroot_setup() {
     mount --bind /sys $MOUNT_POINT/sys
 }
 
+packages_install() {
+    echo "Installing base packages..."
+    chroot $MOUNT_POINT flux update
+    for pkg in $PACKAGES; do
+        chroot $MOUNT_POINT flux install "$pkg"
+    done
+}
+
 bootloader_install() {
-    echo "Installing GRUB..."
-    chroot $MOUNT_POINT flux install grub
-    chroot $MOUNT_POINT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Kira Linux"
-    chroot $MOUNT_POINT grub-mkconfig -o /boot/grub/grub.cfg
+    if [ "$PARTITION_MODE" = "1" ]; then
+        echo "Installing GRUB..."
+        chroot $MOUNT_POINT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Kira Linux"
+        chroot $MOUNT_POINT grub-mkconfig -o /boot/grub/grub.cfg
+    else
+        echo "Updating existing bootloader..."
+        if [ "$ESP_EXTERNAL" = "1" ]; then
+            mount "$ESP_PART" "$MOUNT_POINT/boot/efi"
+            chroot $MOUNT_POINT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Kira Linux"
+            chroot $MOUNT_POINT grub-mkconfig -o /boot/grub/grub.cfg
+            umount "$MOUNT_POINT/boot/efi"
+        else
+            chroot $MOUNT_POINT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Kira Linux"
+            chroot $MOUNT_POINT grub-mkconfig -o /boot/grub/grub.cfg
+        fi
+    fi
 }
 
 chroot_cleanup() {
@@ -181,7 +304,9 @@ chroot_cleanup() {
 
 unmount_partition() {
     echo "Partition unmounting..."
-    umount "$MOUNT_POINT/boot/efi"
+    if [ "$ESP_EXTERNAL" = "0" ] || mountpoint -q "$MOUNT_POINT/boot/efi"; then
+        umount "$MOUNT_POINT/boot/efi"
+    fi
     umount "$MOUNT_POINT"
     if [ "$CONFIRM_SWAP" = "y" ]; then
         swapoff "$SWAP_PART"
@@ -202,9 +327,7 @@ main() {
     echo "Welcome to Kira Linux installer !"
     check_root
     network_setup
-    select_disk
-    confirm_disk
-    select_partition
+    select_partition_mode
     format_partition
     mount_partition
     copy_tarball
@@ -212,6 +335,7 @@ main() {
     set_hostname
     user_setup
     chroot_setup
+    packages_install
     bootloader_install
     chroot_cleanup
     unmount_partition

@@ -38,10 +38,11 @@ build/installer-initramfs.cpio.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS)
 	cp build/kira-base.tar.gz build/installer-root/installer/kira-base.tar.gz
 	cd build/installer-root && find . | cpio -oH newc --owner root:root | gzip > ../installer-initramfs.cpio.gz
 
-build/BOOTX64.EFI: | build/
+build/BOOTX64.EFI: grub.cfg grub-early.cfg | build/
 	grub-mkimage \
 		-O x86_64-efi \
 		-o build/BOOTX64.EFI \
+		-c grub-early.cfg \
 		-p /EFI/BOOT \
 		iso9660 part_gpt part_msdos fat ext2 normal boot linux echo configfile \
 		search search_fs_uuid search_fs_file search_label \

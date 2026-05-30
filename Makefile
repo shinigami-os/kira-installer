@@ -36,6 +36,7 @@ build/installer-initramfs.cpio.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS)
 	chmod +x build/installer-root/usr/bin/kira-install
 	mkdir -p build/installer-root/installer
 	cp build/kira-base.tar.gz build/installer-root/installer/kira-base.tar.gz
+	cp $(KERNEL) build/installer-root/installer/bzImage
 	cd build/installer-root && find . | cpio -oH newc --owner root:root | gzip > ../installer-initramfs.cpio.gz
 
 build/BOOTX64.EFI: grub.cfg grub-early.cfg | build/

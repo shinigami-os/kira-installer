@@ -9,7 +9,8 @@ SWAP_PART=""
 PARTITION_MODE=""
 ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
-PACKAGES="make zlib gcc binutils flex bison pkgconf util-linux os-prober grub"
+KERNEL_IMAGE="/installer/bzImage"
+PACKAGES="make zlib gcc binutils flex bison pkgconf util-linux os-prober grub efivar efibootmgr"
 TARBALL="/installer/kira-base.tar.gz"
 
 check_root() {
@@ -223,6 +224,11 @@ copy_tarball() {
     chmod 1777 "$MOUNT_POINT/tmp"
 }
 
+copy_kernel() {
+    echo "Copying kernel..."
+    cp "$KERNEL_IMAGE" "$MOUNT_POINT/boot/vmlinuz"
+}
+
 fstab_entry() {
     echo "Creating fstab..."
     cat > "$MOUNT_POINT/etc/fstab" << EOF
@@ -249,16 +255,16 @@ user_setup() {
     echo "Root setup..."
     read -s -p "Enter root password: " ROOT_PASS
     echo
-    echo "root:$ROOT_PASS" | chroot $MOUNT_POINT chpasswd
+    echo "root:$ROOT_PASS" | chroot $MOUNT_POINT /usr/sbin/chpasswd
     echo "User setup..."
     read -p "Enter username: " USERNAME
     if [ -z "$USERNAME" ]; then
         USERNAME="kira"
     fi
-    chroot $MOUNT_POINT useradd -m -s /bin/zsh "$USERNAME"
+    chroot $MOUNT_POINT /usr/sbin/useradd -m -s /usr/bin/zsh "$USERNAME"
     read -s -p "Enter password for $USERNAME: " USER_PASS
     echo
-    echo "$USERNAME:$USER_PASS" | chroot $MOUNT_POINT chpasswd
+    echo "$USERNAME:$USER_PASS" | chroot $MOUNT_POINT /usr/sbin/chpasswd
 }
 
 chroot_setup() {
@@ -266,6 +272,8 @@ chroot_setup() {
     mount --bind /dev $MOUNT_POINT/dev
     mount --bind /proc $MOUNT_POINT/proc
     mount --bind /sys $MOUNT_POINT/sys
+    mount --bind /sys/firmware/efi/efivars $MOUNT_POINT/sys/firmware/efi/efivars
+    cp /etc/resolv.conf $MOUNT_POINT/etc/resolv.conf
 }
 
 packages_install() {
@@ -297,6 +305,7 @@ bootloader_install() {
 
 chroot_cleanup() {
     echo "Unbinding Virtual File Systems..."
+    umount $MOUNT_POINT/sys/firmware/efi/efivars
     umount $MOUNT_POINT/sys
     umount $MOUNT_POINT/proc
     umount $MOUNT_POINT/dev
@@ -331,6 +340,7 @@ main() {
     format_partition
     mount_partition
     copy_tarball
+    copy_kernel
     fstab_entry
     set_hostname
     user_setup

@@ -226,7 +226,8 @@ copy_tarball() {
 
 copy_kernel() {
     echo "Copying kernel..."
-    cp "$KERNEL_IMAGE" "$MOUNT_POINT/boot/vmlinuz"
+    KERNEL_VERSION=$(cat /proc/version | awk '{print $3}')
+    cp "$KERNEL_IMAGE" "$MOUNT_POINT/boot/vmlinuz-$KERNEL_VERSION"
 }
 
 fstab_entry() {

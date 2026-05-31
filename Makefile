@@ -1,4 +1,4 @@
-KERNEL ?= ../shinigami/arch/x86_64/boot/bzImage
+KERNEL ?= ../shinigami/arch/x86/boot/bzImage
 KIRA_BASE_STAMP ?= ../kira-base/build/stamps/sysroot.stamp
 KIRA_BASE_SYSROOT ?= ../kira-base/build/sysroot
 KIRA_BASE_INITRAMFS ?= ../kira-base/build/initramfs.cpio.gz

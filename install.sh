@@ -222,6 +222,7 @@ copy_tarball() {
         "$MOUNT_POINT/var/cache/flux" \
         "$MOUNT_POINT/var/lib/flux"
     chmod 1777 "$MOUNT_POINT/tmp"
+    chown root:root "$MOUNT_POINT/var/empty"
 }
 
 copy_kernel() {

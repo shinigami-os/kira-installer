@@ -12,6 +12,7 @@ MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
 PACKAGES="make zlib gcc binutils flex bison pkgconf util-linux os-prober grub efivar efibootmgr"
 TARBALL="/installer/kira-base.tar.gz"
+KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
 
 check_root() {
     echo "Checking root..."
@@ -221,8 +222,23 @@ copy_tarball() {
         "$MOUNT_POINT/run" \
         "$MOUNT_POINT/var/cache/flux" \
         "$MOUNT_POINT/var/lib/flux"
+    if [ "$KIRA_TIER" = "desktop" ]; then
+        mkdir -p "$MOUNT_POINT/var/lib/NetworkManager"
+        chmod 755 "$MOUNT_POINT/var/lib/NetworkManager"
+    fi
     chmod 1777 "$MOUNT_POINT/tmp"
     chown root:root "$MOUNT_POINT/var/empty"
+    echo "$KIRA_TIER" > "$MOUNT_POINT/etc/kira-tier"
+}
+
+remove_live_user() {
+    if [ "$KIRA_TIER" = "desktop" ]; then
+        echo "Removing live user..."
+        sed -i '/^kira:/d' "$MOUNT_POINT/etc/passwd"
+        sed -i '/^kira:/d' "$MOUNT_POINT/etc/shadow"
+        sed -i '/^kira:/d' "$MOUNT_POINT/etc/group"
+        rm -rf "$MOUNT_POINT/home/kira"
+    fi
 }
 
 copy_kernel() {
@@ -342,6 +358,7 @@ main() {
     format_partition
     mount_partition
     copy_tarball
+    remove_live_user
     copy_kernel
     fstab_entry
     set_hostname

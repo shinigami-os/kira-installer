@@ -10,7 +10,8 @@ PARTITION_MODE=""
 ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
-PACKAGES="make zlib gcc binutils flex bison pkgconf util-linux os-prober grub efivar efibootmgr"
+PACKAGES="make zlib gcc binutils flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano"
+PACKAGES_DESKTOP="helix netsurf git"
 TARBALL="/installer/kira-base.tar.gz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
 
@@ -298,8 +299,13 @@ packages_install() {
     echo "Installing base packages..."
     chroot $MOUNT_POINT flux update
     for pkg in $PACKAGES; do
-        chroot $MOUNT_POINT flux install "$pkg"
+        chroot $MOUNT_POINT flux install -y "$pkg"
     done
+    if [ "$KIRA_TIER" = "desktop" ]; then
+        for pkg in $PACKAGES_DESKTOP; do
+            chroot $MOUNT_POINT flux install -y "$pkg"
+        done
+    fi
 }
 
 bootloader_install() {

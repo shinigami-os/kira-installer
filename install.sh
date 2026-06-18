@@ -10,7 +10,7 @@ PARTITION_MODE=""
 ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
-PACKAGES="make zlib binutils flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano"
+PACKAGES="make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano"
 PACKAGES_DESKTOP="helix netsurf git"
 TARBALL="/installer/kira-base.tar.gz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
@@ -302,10 +302,15 @@ packages_install() {
         chroot $MOUNT_POINT flux install -y "$pkg"
     done
     if [ "$KIRA_TIER" = "desktop" ]; then
+        echo "Installing desktop packages..."
         for pkg in $PACKAGES_DESKTOP; do
             chroot $MOUNT_POINT flux install -y "$pkg"
         done
     fi
+    echo "Checking for any glibc-compiled leaks..."
+    find /usr/lib -name "*.so*" -type f | while read lib; do
+        readelf -d "$lib" 2>/dev/null | grep -q "ld-linux-x86-64\|libc\.so\.6" && rm -f "$lib"
+    done
 }
 
 bootloader_install() {

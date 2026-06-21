@@ -10,8 +10,8 @@ PARTITION_MODE=""
 ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
-PACKAGES="make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano"
-PACKAGES_DESKTOP="helix netsurf git"
+PACKAGES="zsh zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano"
+PACKAGES_DESKTOP="kira-desktop-swayFX helix netsurf git"
 TARBALL="/installer/kira-base.tar.gz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
 
@@ -308,7 +308,7 @@ packages_install() {
         done
     fi
     echo "Checking for any glibc-compiled leaks..."
-    find /usr/lib -name "*.so*" -type f | while read lib; do
+    find "$MOUNT_POINT/usr/lib" -name "*.so*" -type f | while read lib; do
         readelf -d "$lib" 2>/dev/null | grep -q "ld-linux-x86-64\|libc\.so\.6" && rm -f "$lib"
     done
 }
@@ -373,9 +373,9 @@ main() {
     copy_kernel
     fstab_entry
     set_hostname
-    user_setup
     chroot_setup
     packages_install
+    user_setup
     bootloader_install
     chroot_cleanup
     unmount_partition

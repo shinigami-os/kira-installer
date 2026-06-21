@@ -32,6 +32,18 @@ build/kira-base.tar.gz: $(KIRA_BASE_STAMP) | build/
 build/installer-initramfs.cpio.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) install.sh | build/
 	mkdir -p build/installer-root
 	gunzip -c $(KIRA_BASE_INITRAMFS) | cpio -idm -D build/installer-root/
+	@echo "needs to run as root"
+	sudo mount --bind /proc build/installer-root/proc
+	sudo mount --bind /sys build/installer-root/sys
+	sudo mount --bind /dev build/installer-root/dev
+	sudo mount --bind /dev/pts build/installer-root/dev/pts
+	sudo cp /etc/resolv.conf build/installer-root/etc/resolv.conf
+	sudo chroot build/installer-root /usr/bin/flux update
+	sudo chroot build/installer-root /usr/bin/flux install -y kira-installer-tools
+	sudo umount build/installer-root/dev/pts
+	sudo umount build/installer-root/dev
+	sudo umount build/installer-root/sys
+	sudo umount build/installer-root/proc
 	cp install.sh build/installer-root/usr/bin/kira-install
 	chmod +x build/installer-root/usr/bin/kira-install
 	mkdir -p build/installer-root/installer

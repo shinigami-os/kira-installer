@@ -10,7 +10,7 @@ PARTITION_MODE=""
 ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
-PACKAGES="zsh zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano"
+PACKAGES="shadow zsh zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano"
 PACKAGES_DESKTOP="kira-desktop-swayFX helix netsurf git"
 TARBALL="/installer/kira-base.tar.gz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
@@ -295,6 +295,25 @@ chroot_setup() {
     cp /etc/resolv.conf $MOUNT_POINT/etc/resolv.conf
 }
 
+select_tier() {
+    echo "Select installation tier:"
+    read -p "Enter 1 for desktop (SwayFX) | 2 for server: " TIER_CHOICE
+    case "$TIER_CHOICE" in
+        1) KIRA_TIER="desktop";;
+        2) KIRA_TIER="server";;
+        *) echo "Invalid choice, defaulting to server."; KIRA_TIER="server";;
+    esac
+
+    if [ "$KIRA_TIER" = "desktop" ]; then
+        mkdir -p "$MOUNT_POINT/root/.config/kira-desktop"
+        echo "swayFX" > "$MOUNT_POINT/root/.config/kira-desktop/active-de"
+        echo "kira-default" > "$MOUNT_POINT/root/.config/kira-desktop/current-theme"
+        mkdir -p "$MOUNT_POINT/home/$USERNAME/.config/kira-desktop"
+        echo "swayFX" > "$MOUNT_POINT/home/$USERNAME/.config/kira-desktop/active-de"
+        echo "kira-default" > "$MOUNT_POINT/home/$USERNAME/.config/kira-desktop/current-theme"
+    fi
+}
+
 packages_install() {
     echo "Installing base packages..."
     chroot $MOUNT_POINT flux update
@@ -370,6 +389,7 @@ main() {
     fstab_entry
     set_hostname
     chroot_setup
+    select_tier
     packages_install
     user_setup
     bootloader_install

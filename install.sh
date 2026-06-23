@@ -307,10 +307,6 @@ packages_install() {
             chroot $MOUNT_POINT flux install -y "$pkg"
         done
     fi
-    echo "Checking for any glibc-compiled leaks..."
-    find "$MOUNT_POINT/usr/lib" -name "*.so*" -type f | while read lib; do
-        readelf -d "$lib" 2>/dev/null | grep -q "ld-linux-x86-64\|libc\.so\.6" && rm -f "$lib"
-    done
 }
 
 bootloader_install() {

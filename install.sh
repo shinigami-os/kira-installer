@@ -10,8 +10,9 @@ PARTITION_MODE=""
 ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
+INITRAMFS_IMAGE="/installer/initramfs.cpio.gz"
 PACKAGES="shadow zsh zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano"
-PACKAGES_DESKTOP="kira-desktop-swayFX helix netsurf git"
+PACKAGES_DESKTOP="kira-desktop-swayFX netsurf git"
 TARBALL="/installer/kira-base.tar.gz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
 
@@ -246,6 +247,8 @@ copy_kernel() {
     echo "Copying kernel..."
     KERNEL_VERSION=$(cat /proc/version | awk '{print $3}')
     cp "$KERNEL_IMAGE" "$MOUNT_POINT/boot/vmlinuz-$KERNEL_VERSION"
+    echo "Copying initramfs..."
+    cp "$INITRAMFS_IMAGE" "$MOUNT_POINT/boot/initrd.img-$KERNEL_VERSION"
 }
 
 fstab_entry() {

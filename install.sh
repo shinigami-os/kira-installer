@@ -11,8 +11,8 @@ ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
 INITRAMFS_IMAGE="/installer/initramfs.cpio.gz"
-PACKAGES="shadow zsh zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano"
-PACKAGES_DESKTOP="kira-desktop-swayFX netsurf git"
+PACKAGES="shadow zsh zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano sudo build-essential"
+PACKAGES_DESKTOP="kira-desktop-swayFX netsurf git greetd"
 TARBALL="/installer/kira-base.tar.gz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
 
@@ -283,7 +283,7 @@ user_setup() {
     if [ -z "$USERNAME" ]; then
         USERNAME="kira"
     fi
-    chroot $MOUNT_POINT /usr/sbin/useradd -m -s /usr/bin/zsh "$USERNAME"
+    chroot $MOUNT_POINT /usr/sbin/useradd -m -s /usr/bin/zsh -G wheel,video,input,audio "$USERNAME"
     read -s -p "Enter password for $USERNAME: " USER_PASS
     echo
     echo "$USERNAME:$USER_PASS" | chroot $MOUNT_POINT /usr/sbin/chpasswd
@@ -317,6 +317,14 @@ select_tier() {
     fi
 }
 
+has_intel_wifi() {
+    for d in /sys/bus/pci/devices/*; do
+        [ "$(cat "$d/vendor" 2>/dev/null)" = "0x8086" ] || continue
+        case "$(cat "$d/class" 2>/dev/null)" in 0x028*) return 0 ;; esac
+    done
+    return 1
+}
+
 packages_install() {
     echo "Installing base packages..."
     chroot $MOUNT_POINT flux update
@@ -328,6 +336,10 @@ packages_install() {
         for pkg in $PACKAGES_DESKTOP; do
             chroot $MOUNT_POINT flux install -y "$pkg"
         done
+    fi
+    if has_intel_wifi; then
+        echo "Intel WiFi detected, installing iwlwifi-firmware..."
+        chroot $MOUNT_POINT flux install -y iwlwifi-firmware
     fi
 }
 

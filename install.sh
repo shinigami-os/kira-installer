@@ -12,7 +12,8 @@ MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
 INITRAMFS_IMAGE="/installer/initramfs.cpio.gz"
 PACKAGES="shadow zsh zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano sudo build-essential"
-PACKAGES_DESKTOP="kira-desktop-swayFX netsurf git greetd"
+PACKAGES_SWAYFX="kira-desktop-swayFX netsurf git greetd"
+PACKAGES_SLEEX="kira-desktop-sleex netsurf git greetd"
 TARBALL="/installer/kira-base.tar.gz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
 
@@ -300,14 +301,24 @@ chroot_setup() {
 
 select_tier() {
     echo "Select installation tier:"
-    read -p "Enter 1 for desktop (SwayFX) | 2 for server: " TIER_CHOICE
+    read -p "Enter 1 for desktop (Sleex) | 2 for desktop (SwayFX)  | 3 for server: " TIER_CHOICE
     case "$TIER_CHOICE" in
-        1) KIRA_TIER="desktop";;
-        2) KIRA_TIER="server";;
+        1) KIRA_TIER="desktop-sleex";;
+        2) KIRA_TIER="desktop-swayfx";;
+        3) KIRA_TIER="server";;
         *) echo "Invalid choice, defaulting to server."; KIRA_TIER="server";;
     esac
 
-    if [ "$KIRA_TIER" = "desktop" ]; then
+    if [ "$KIRA_TIER" = "desktop-sleex" ]; then
+        mkdir -p "$MOUNT_POINT/root/.config/kira-desktop"
+        echo "sleex" > "$MOUNT_POINT/root/.config/kira-desktop/active-de"
+        echo "kira-default" > "$MOUNT_POINT/root/.config/kira-desktop/current-theme"
+        mkdir -p "$MOUNT_POINT/home/$USERNAME/.config/kira-desktop"
+        echo "sleex" > "$MOUNT_POINT/home/$USERNAME/.config/kira-desktop/active-de"
+        echo "kira-default" > "$MOUNT_POINT/home/$USERNAME/.config/kira-desktop/current-theme"
+    fi
+
+    if [ "$KIRA_TIER" = "desktop-swayfx" ]; then
         mkdir -p "$MOUNT_POINT/root/.config/kira-desktop"
         echo "swayFX" > "$MOUNT_POINT/root/.config/kira-desktop/active-de"
         echo "kira-default" > "$MOUNT_POINT/root/.config/kira-desktop/current-theme"
@@ -331,9 +342,15 @@ packages_install() {
     for pkg in $PACKAGES; do
         chroot $MOUNT_POINT flux install -y "$pkg"
     done
-    if [ "$KIRA_TIER" = "desktop" ]; then
-        echo "Installing desktop packages..."
-        for pkg in $PACKAGES_DESKTOP; do
+    if [ "$KIRA_TIER" = "desktop-sleex" ]; then
+        echo "Installing desktop packages (Sleex)..."
+        for pkg in $PACKAGES_SLEEX; do
+            chroot $MOUNT_POINT flux install -y "$pkg"
+        done
+    fi
+    if [ "$KIRA_TIER" = "desktop-swayfx" ]; then
+        echo "Installing desktop packages (SwayFX)..."
+        for pkg in $PACKAGES_SWAYFX; do
             chroot $MOUNT_POINT flux install -y "$pkg"
         done
     fi

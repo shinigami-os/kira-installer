@@ -1,13 +1,10 @@
 KERNEL ?= ../shinigami/arch/x86/boot/bzImage
 KIRA_BASE_INITRAMFS ?= ../kira-base/build/initramfs.cpio.gz
 KIRA_BASE_ROOTFS ?= ../kira-base/build/rootfs.tar.gz
+# Choose DE between sleex, swayfx
+DE ?= sleex
 
 # Mount points for the chroot used to build each installer environment.
-# Deliberately kept OUTSIDE build/ so that `rm -rf build` (run manually,
-# by habit, or by any future tooling) can never recurse into a live
-# /proc, /sys, /dev bind mount
-# That footgun previously made a stale mount from a failed build
-# turn a routine cleanup into a system-mount deletion attempt.
 ROOT_CONSOLE = /tmp/kira-installer-root-console
 ROOT_DESKTOP = /tmp/kira-installer-root-desktop
 
@@ -106,8 +103,17 @@ build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-session-bus; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh-plugins; \
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-branding; \
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-branding;
+ifeq ($(DE),swayfx)
+	set -e; \
+	trap '$(call UNMOUNT_CHROOT,$(ROOT_DESKTOP))' EXIT; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-desktop-swayFX
+endif
+ifeq ($(DE),sleex)
+	set -e; \
+	trap '$(call UNMOUNT_CHROOT,$(ROOT_DESKTOP))' EXIT; \
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-desktop-sleex
+endif
 	cp -r $(ROOT_DESKTOP)/etc/skel/. $(ROOT_DESKTOP)/root/
 
 	sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' $(ROOT_DESKTOP)/etc/ssh/sshd_config

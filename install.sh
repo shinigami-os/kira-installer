@@ -27,16 +27,20 @@ check_root() {
 
 network_setup() {
     echo "Network setup..."
-    ip link
+    iwctl device list
     read -p "Enter network interface: " NETWORK_INTERFACE
     echo
     if [ -d "/sys/class/net/$NETWORK_INTERFACE/wireless" ]; then
+        echo "Wireless setup..."
+        iwctl station "$NETWORK_INTERFACE" scan
+        sleep 0.5
+        iwctl station "$NETWORK_INTERFACE" get-networks
         read -p "Enter wireless SSID: " WIRELESS_SSID
-        read -s -p "Enter wireless password: " WIRELESS_PASSWORD
-        wpa_passphrase "$WIRELESS_SSID" "$WIRELESS_PASSWORD" > /tmp/wpa.conf
-        wpa_supplicant -B -i "$NETWORK_INTERFACE" -c "/tmp/wpa.conf"
+        iwctl station "$NETWORK_INTERFACE" connect "$WIRELESS_SSID"
         dhcpcd "$NETWORK_INTERFACE"
     else
+        echo "Ethernet setup..."
+        ip link set "$NETWORK_INTERFACE" up
         dhcpcd "$NETWORK_INTERFACE"
     fi
     set +e

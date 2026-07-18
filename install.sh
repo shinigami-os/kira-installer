@@ -27,21 +27,19 @@ check_root() {
 
 network_setup() {
     echo "Network setup..."
-    iwctl device list
+    nmcli device status
     read -p "Enter network interface: " NETWORK_INTERFACE
     echo
     if [ -d "/sys/class/net/$NETWORK_INTERFACE/wireless" ]; then
         echo "Wireless setup..."
-        iwctl station "$NETWORK_INTERFACE" scan
-        sleep 0.5
-        iwctl station "$NETWORK_INTERFACE" get-networks
+        nmcli device wifi rescan ifname "$NETWORK_INTERFACE"
+        sleep 2
+        nmcli device wifi list ifname "$NETWORK_INTERFACE"
         read -p "Enter wireless SSID: " WIRELESS_SSID
-        iwctl station "$NETWORK_INTERFACE" connect "$WIRELESS_SSID"
-        dhcpcd "$NETWORK_INTERFACE"
+        nmcli --ask device wifi connect "$WIRELESS_SSID" ifname "$NETWORK_INTERFACE"
     else
         echo "Ethernet setup..."
-        ip link set "$NETWORK_INTERFACE" up
-        dhcpcd "$NETWORK_INTERFACE"
+        nmcli device connect "$NETWORK_INTERFACE"
     fi
     set +e
     ping -c 3 8.8.8.8

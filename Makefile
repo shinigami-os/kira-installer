@@ -14,11 +14,11 @@ UNMOUNT_CHROOT = sudo umount $(1)/dev/pts 2>/dev/null; sudo umount $(1)/dev 2>/d
 
 .PHONY: all clean unmount-stale qemu-console qemu-desktop console desktop
 
-all: build/kira-console.iso build/kira-desktop.iso
+all: build/kira-console.iso build/kira-desktop-$(DE).iso
 
 console: build/kira-console.iso
 
-desktop: build/kira-desktop.iso
+desktop: build/kira-desktop-$(DE).iso
 
 unmount-stale:
 	$(call UNMOUNT_CHROOT,$(ROOT_CONSOLE))
@@ -161,7 +161,7 @@ build/kira-console.iso: build/live-rootfs-console.tar.gz $(KIRA_BASE_INITRAMFS) 
 		-append_partition 2 0xef build/efi-console.img \
 		build/iso-root-console/
 
-build/kira-desktop.iso: build/live-rootfs-desktop.tar.gz $(KIRA_BASE_INITRAMFS) $(KERNEL) build/BOOTX64.EFI | build/
+build/kira-desktop-$(DE).iso: build/live-rootfs-desktop.tar.gz $(KIRA_BASE_INITRAMFS) $(KERNEL) build/BOOTX64.EFI | build/
 	mkdir -p build/iso-root-desktop/boot
 	mkdir -p build/iso-root-desktop/EFI/BOOT
 	cp $(KERNEL) build/iso-root-desktop/boot/bzImage
@@ -192,9 +192,9 @@ qemu-console: build/kira-console.iso
 		-nographic \
 		-serial mon:stdio
 
-qemu-desktop: build/kira-desktop.iso
+qemu-desktop: build/kira-desktop-$(DE).iso
 	qemu-system-x86_64 \
-		-drive file=build/kira-desktop.iso,format=raw,if=virtio \
+		-drive file=build/kira-desktop-$(DE).iso,format=raw,if=virtio \
 		-bios /usr/share/ovmf/OVMF.fd \
 		-m 1G \
 		-nographic \

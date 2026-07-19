@@ -98,7 +98,6 @@ build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux update; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-installer-tools; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-net; \
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-login; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-seat; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-session-bus; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh; \

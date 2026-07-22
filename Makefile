@@ -113,7 +113,7 @@ ifeq ($(DE),sleex)
 	trap '$(call UNMOUNT_CHROOT,$(ROOT_DESKTOP))' EXIT; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-desktop-sleex
 endif
-	cp -r $(ROOT_DESKTOP)/etc/skel/. $(ROOT_DESKTOP)/root/
+	sudo cp -r $(ROOT_DESKTOP)/etc/skel/. $(ROOT_DESKTOP)/root/
 
 	sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' $(ROOT_DESKTOP)/etc/ssh/sshd_config
 	sed -i 's/#PermitEmptyPasswords.*/PermitEmptyPasswords yes/' $(ROOT_DESKTOP)/etc/ssh/sshd_config

@@ -3,6 +3,12 @@ KIRA_BASE_INITRAMFS ?= ../kira-base/build/initramfs.cpio.gz
 KIRA_BASE_ROOTFS ?= ../kira-base/build/rootfs.tar.gz
 # Choose DE between sleex, swayfx
 DE ?= sleex
+ifeq ($(DE),swayfx)
+DESKTOP_PKG := kira-desktop-swayFX
+endif
+ifeq ($(DE),sleex)
+DESKTOP_PKG := kira-desktop-sleex
+endif
 
 # Mount points for the chroot used to build each installer environment.
 ROOT_CONSOLE = /tmp/kira-installer-root-console
@@ -103,13 +109,7 @@ build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh-plugins; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-branding; \
-ifeq ($(DE),swayfx)
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-desktop-swayFX; \
-endif
-ifeq ($(DE),sleex)
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-desktop-sleex; \
-endif
-	true
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y $(DESKTOP_PKG)
 	sudo cp -r $(ROOT_DESKTOP)/etc/skel/. $(ROOT_DESKTOP)/root/
 
 	sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' $(ROOT_DESKTOP)/etc/ssh/sshd_config

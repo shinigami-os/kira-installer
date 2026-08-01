@@ -109,7 +109,8 @@ build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh-plugins; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-branding; \
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y $(DESKTOP_PKG)
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y $(DESKTOP_PKG); \
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-live-session
 	sudo cp -r $(ROOT_DESKTOP)/etc/skel/. $(ROOT_DESKTOP)/root/
 
 	sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' $(ROOT_DESKTOP)/etc/ssh/sshd_config

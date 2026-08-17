@@ -3,6 +3,7 @@
 set -e
 
 TARGET_DISK=""
+TARGET_DISK_SHORT=""
 ESP_PART=""
 ROOT_PART=""
 SWAP_PART=""
@@ -57,30 +58,59 @@ select_partition_mode() {
     esac
 }
 
+get_live_disk() {
+    # best-effort: find the physical disk backing the live/installer medium
+    # (e.g. the boot USB) so we can warn/refuse if it's selected as the target
+    LIVE_SRC=$(findmnt -no SOURCE /installer 2>/dev/null || findmnt -no SOURCE / 2>/dev/null)
+    [ -z "$LIVE_SRC" ] && return 0
+    LIVE_SRC=$(readlink -f "$LIVE_SRC" 2>/dev/null || echo "$LIVE_SRC")
+    lsblk -no PKNAME "$LIVE_SRC" 2>/dev/null | head -1
+}
+
 select_disk() {
     echo "Disk selection..."
     lsblk -d -o NAME,SIZE,MODEL
-    read -p "Enter disk name (e.g. sda, nvme0n1): " TARGET_DISK
-    TARGET_DISK="/dev/$TARGET_DISK"
+    LIVE_DISK=$(get_live_disk)
+    if [ -n "$LIVE_DISK" ]; then
+        echo "(note: $LIVE_DISK appears to be the live/installer medium itself)"
+    fi
+    read -p "Enter disk name (e.g. sda, nvme0n1): " TARGET_DISK_SHORT
+    TARGET_DISK="/dev/$TARGET_DISK_SHORT"
     if [ ! -b "$TARGET_DISK" ]; then
         echo "Error: $TARGET_DISK is not a valid block device."
         exit 1
     fi
+    if [ -n "$LIVE_DISK" ] && [ "$TARGET_DISK_SHORT" = "$LIVE_DISK" ]; then
+        echo "/!\ $TARGET_DISK looks like the live/installer medium you booted from, not an install target. /!\ "
+        read -p "Type 'yes-erase-live-media' to proceed anyway, or anything else to abort: " LIVE_OVERRIDE
+        if [ "$LIVE_OVERRIDE" != "yes-erase-live-media" ]; then
+            echo "Aborting."
+            exit 1
+        fi
+    fi
 }
 
 confirm_disk() {
-    echo "/!\ Confirm ? The disk $TARGET_DISK will be wiped. /!\ "
-    read -p "Confirm (type 'yes' to confirm): " CONFIRM
-    if [ "$CONFIRM" != "yes" ]; then
+    echo
+    echo "About to COMPLETELY WIPE and repartition $TARGET_DISK:"
+    lsblk "$TARGET_DISK" -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT
+    echo
+    echo "/!\ ALL DATA on $TARGET_DISK will be permanently destroyed. /!\ "
+    read -p "Type the disk name ($TARGET_DISK_SHORT) to confirm, or anything else to abort: " CONFIRM
+    if [ "$CONFIRM" != "$TARGET_DISK_SHORT" ]; then
         echo "Aborting."
         exit 1
     fi
 }
 
 confirm_free_space() {
-    echo "/!\ Confirm ? The free space on $TARGET_DISK will be used. /!\ "
-    read -p "Confirm (type 'yes' to confirm): " CONFIRM
-    if [ "$CONFIRM" != "yes" ]; then
+    echo
+    echo "Current layout of $TARGET_DISK:"
+    lsblk "$TARGET_DISK" -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT
+    echo
+    echo "/!\ Confirm ? New partitions will be created in the free space on $TARGET_DISK. Existing partitions are left untouched. /!\ "
+    read -p "Type the disk name ($TARGET_DISK_SHORT) to confirm, or anything else to abort: " CONFIRM
+    if [ "$CONFIRM" != "$TARGET_DISK_SHORT" ]; then
         echo "Aborting."
         exit 1
     fi
@@ -133,11 +163,15 @@ format_free_space() {
         echo "No free space found on $TARGET_DISK. Aborting."
         exit 1
     fi
-    if [ $((END - START)) -lt 100000 ]; then
-        echo "Not enough free space on $TARGET_DISK. Aborting."
+    # START/END are already MiB values here (units stripped above), so this
+    # is a straight MiB comparison: require at least 15GiB of free space,
+    # enough for a minimal Kira root without being an unreasonably high bar
+    if [ $((END - START)) -lt 15360 ]; then
+        echo "Not enough free space on $TARGET_DISK (need at least 15GiB, found $(((END - START) / 1024))GiB). Aborting."
         exit 1
     fi
 
+    echo "Largest free region found: ${START}MiB - ${END}MiB ($(((END - START) / 1024))GiB)"
     LAST_PART=$(parted -s "$TARGET_DISK" print | awk '/^ [0-9]/{print $1}' | sort -n | tail -1)
 
     read -p "Do you want a swap partition ? (y/n): " CONFIRM_SWAP
@@ -338,6 +372,14 @@ has_intel_wifi() {
     return 1
 }
 
+has_nvidia_gpu() {
+    for d in /sys/bus/pci/devices/*; do
+        [ "$(cat "$d/vendor" 2>/dev/null)" = "0x10de" ] || continue
+        case "$(cat "$d/class" 2>/dev/null)" in 0x03*) return 0 ;; esac
+    done
+    return 1
+}
+
 packages_install() {
     echo "Installing base packages..."
     chroot $MOUNT_POINT flux update
@@ -359,6 +401,10 @@ packages_install() {
     if has_intel_wifi; then
         echo "Intel WiFi detected, installing iwlwifi-firmware..."
         chroot $MOUNT_POINT flux install -y iwlwifi-firmware
+    fi
+    if has_nvidia_gpu; then
+        echo "NVIDIA GPU detected, installing nouveau-firmware..."
+        chroot $MOUNT_POINT flux install -y nouveau-firmware
     fi
 }
 
@@ -423,9 +469,9 @@ main() {
     fstab_entry
     set_hostname
     chroot_setup
+    user_setup
     select_tier
     packages_install
-    user_setup
     bootloader_install
     chroot_cleanup
     unmount_partition

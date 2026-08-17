@@ -1,14 +1,8 @@
 KERNEL ?= ../shinigami/arch/x86/boot/bzImage
 KIRA_BASE_INITRAMFS ?= ../kira-base/build/initramfs.cpio.gz
 KIRA_BASE_ROOTFS ?= ../kira-base/build/rootfs.tar.gz
-# Choose DE between sleex, swayfx
+# Choose DE between sleex, swayFX
 DE ?= sleex
-ifeq ($(DE),swayfx)
-DESKTOP_PKG := kira-desktop-swayFX
-endif
-ifeq ($(DE),sleex)
-DESKTOP_PKG := kira-desktop-sleex
-endif
 
 # Mount points for the chroot used to build each installer environment.
 ROOT_CONSOLE = /tmp/kira-installer-root-console
@@ -109,7 +103,8 @@ build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh-plugins; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-branding; \
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y $(DESKTOP_PKG); \
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-desktop-$(DE); \
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y nouveau-firmware; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-live-session
 	sudo cp -r $(ROOT_DESKTOP)/etc/skel/. $(ROOT_DESKTOP)/root/
 

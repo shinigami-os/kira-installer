@@ -469,6 +469,12 @@ main() {
     fstab_entry
     set_hostname
     chroot_setup
+    # user_setup needs the real useradd/chpasswd from the shadow package, but
+    # it can't just move after packages_install: select_tier needs $USERNAME
+    # (set in user_setup) and packages_install needs $KIRA_TIER (set in
+    # select_tier) - so pull shadow in on its own ahead of everything else
+    chroot $MOUNT_POINT flux update
+    chroot $MOUNT_POINT flux install -y shadow
     user_setup
     select_tier
     packages_install

@@ -270,6 +270,21 @@ copy_tarball() {
     echo "$KIRA_TIER" > "$MOUNT_POINT/etc/kira-tier"
 }
 
+copy_network_config() {
+    # keyfile plugin (see networkmanager/files/NetworkManager.conf) stores
+    # connections as plain files here - carry over whatever got set up
+    # during the live session (e.g. wifi) so the install doesn't come up
+    # with no network on first boot
+    if [ -d /etc/NetworkManager/system-connections ] && \
+       [ -n "$(ls -A /etc/NetworkManager/system-connections 2>/dev/null)" ]; then
+        echo "Copying network connections..."
+        mkdir -p "$MOUNT_POINT/etc/NetworkManager/system-connections"
+        cp -a /etc/NetworkManager/system-connections/. "$MOUNT_POINT/etc/NetworkManager/system-connections/"
+        chown -R root:root "$MOUNT_POINT/etc/NetworkManager/system-connections"
+        chmod 600 "$MOUNT_POINT"/etc/NetworkManager/system-connections/*
+    fi
+}
+
 remove_live_user() {
     if [ "$KIRA_TIER" = "desktop" ]; then
         echo "Removing live user..."
@@ -464,6 +479,7 @@ main() {
     format_partition
     mount_partition
     copy_tarball
+    copy_network_config
     remove_live_user
     copy_kernel
     fstab_entry
@@ -475,6 +491,11 @@ main() {
     # select_tier) - so pull shadow in on its own ahead of everything else
     chroot $MOUNT_POINT flux update
     chroot $MOUNT_POINT flux install -y shadow
+    # useradd -m copies /etc/skel into the new home right away - kira-branding
+    # is what actually populates .zshrc/.p10k.zsh there, so it has to land
+    # before user_setup too, not later in packages_install like the rest.
+    # kira-branding pulls in zsh and zsh-plugins itself via its own deps.
+    chroot $MOUNT_POINT flux install -y kira-branding
     user_setup
     select_tier
     packages_install

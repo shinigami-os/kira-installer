@@ -81,6 +81,10 @@ build/live-rootfs-console.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	cp build/kira-base.tar.gz $(ROOT_CONSOLE)/installer/kira-base.tar.gz
 	cp $(KERNEL) $(ROOT_CONSOLE)/installer/bzImage
 	cp $(KIRA_BASE_INITRAMFS) $(ROOT_CONSOLE)/installer/initramfs.cpio.gz
+	# every flux install above left its downloaded/built .tar.zst behind here -
+	# that's the same content already extracted onto the filesystem, shipping
+	# both roughly doubles the cost of every package pulled into this chroot
+	sudo rm -rf $(ROOT_CONSOLE)/var/cache/flux/*
 	sudo tar -czpf $(CURDIR)/build/live-rootfs-console.tar.gz --numeric-owner -C $(ROOT_CONSOLE) .
 
 build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) install.sh | build/
@@ -120,6 +124,10 @@ build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	cp build/kira-base.tar.gz $(ROOT_DESKTOP)/installer/kira-base.tar.gz
 	cp $(KERNEL) $(ROOT_DESKTOP)/installer/bzImage
 	cp $(KIRA_BASE_INITRAMFS) $(ROOT_DESKTOP)/installer/initramfs.cpio.gz
+	# every flux install above left its downloaded/built .tar.zst behind here -
+	# that's the same content already extracted onto the filesystem, shipping
+	# both roughly doubles the cost of every package pulled into this chroot
+	sudo rm -rf $(ROOT_DESKTOP)/var/cache/flux/*
 	sudo tar -czpf $(CURDIR)/build/live-rootfs-desktop.tar.gz --numeric-owner -C $(ROOT_DESKTOP) .
 
 build/BOOTX64.EFI: grub.cfg grub-early.cfg | build/

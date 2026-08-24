@@ -33,11 +33,19 @@ network_setup() {
     echo
     if [ -d "/sys/class/net/$NETWORK_INTERFACE/wireless" ]; then
         echo "Wireless setup..."
-        nmcli device wifi rescan ifname "$NETWORK_INTERFACE"
-        sleep 2
-        nmcli device wifi list ifname "$NETWORK_INTERFACE"
-        read -p "Enter wireless SSID: " WIRELESS_SSID
-        nmcli --ask device wifi connect "$WIRELESS_SSID" ifname "$NETWORK_INTERFACE"
+        # -t gives an exact "connected"/"disconnected" field, unlike the
+        # parenthesized nmcli device status output where a plain string
+        # match on "connected" would also match "disconnected"
+        WIFI_STATE=$(nmcli -t -f DEVICE,STATE device status | awk -F: -v dev="$NETWORK_INTERFACE" '$1 == dev { print $2 }')
+        if [ "$WIFI_STATE" = "connected" ]; then
+            echo "$NETWORK_INTERFACE is already connected to Wi-Fi, skipping network selection."
+        else
+            nmcli device wifi rescan ifname "$NETWORK_INTERFACE"
+            sleep 2
+            nmcli device wifi list ifname "$NETWORK_INTERFACE"
+            read -p "Enter wireless SSID: " WIRELESS_SSID
+            nmcli --ask device wifi connect "$WIRELESS_SSID" ifname "$NETWORK_INTERFACE"
+        fi
     else
         echo "Ethernet setup..."
         nmcli device connect "$NETWORK_INTERFACE"

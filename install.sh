@@ -423,7 +423,96 @@ packages_install() {
     fi
 }
 
+# looks for an existing Linux install's own GRUB (/boot/grub/grub.cfg) on any
+# partition of any disk in the machine, not just the one we're installing to
+# - this is what a shared-ESP collision actually needs: another OS's grub
+# doesn't care which physical disk it lives on. Stops at the first match;
+# if a machine already multi-boots, that's an edge case not worth a picker
+# here. Sets EXISTING_GRUB_PART, empty if nothing was found.
+scan_for_existing_grub() {
+    echo "Checking for an existing bootloader elsewhere on this machine..."
+    EXISTING_GRUB_PART=""
+    SCRATCH="/tmp/kira-installer-scan"
+    mkdir -p "$SCRATCH"
+    for disk in $(lsblk -d -o NAME --noheadings); do
+        for part in $(lsblk -ln -o NAME "/dev/$disk" 2>/dev/null | tail -n +2); do
+            PART_DEV="/dev/$part"
+            case "$PART_DEV" in
+                "$ROOT_PART" | "$ESP_PART" | "$SWAP_PART") continue ;;
+            esac
+            FSTYPE=$(blkid -s TYPE -o value "$PART_DEV" 2>/dev/null || true)
+            case "$FSTYPE" in
+                ext2 | ext3 | ext4 | btrfs | xfs) ;;
+                *) continue ;;
+            esac
+            if mount -o ro "$PART_DEV" "$SCRATCH" 2>/dev/null; then
+                if [ -f "$SCRATCH/boot/grub/grub.cfg" ]; then
+                    umount "$SCRATCH" 2>/dev/null || true
+                    rmdir "$SCRATCH" 2>/dev/null || true
+                    EXISTING_GRUB_PART="$PART_DEV"
+                    return
+                fi
+                umount "$SCRATCH" 2>/dev/null || true
+            fi
+        done
+    done
+    rmdir "$SCRATCH" 2>/dev/null || true
+}
+
+# chroots into the OS that owns EXISTING_GRUB_PART and re-runs ITS OWN
+# grub-mkconfig with os-prober forced on, so it picks up the Kira partition
+# we just installed and adds a menu entry inside its existing grub.cfg,
+# instead of us creating a second, separate bootloader install. Returns
+# failure (leaving the existing install untouched) if that OS doesn't have
+# grub-mkconfig/os-prober itself - there is no way to safely drive a foreign
+# bootloader we don't control.
+add_kira_to_existing_grub() {
+    OTHER_MOUNT="/tmp/kira-installer-otheros"
+    mkdir -p "$OTHER_MOUNT"
+
+    # everything here is best-effort: a mount/chroot failure at any point
+    # should fall back to installing our own bootloader, not abort an
+    # otherwise-finished install, so this whole sequence runs with set -e
+    # off and tracks its own success instead
+    set +e
+    MERGE_OK=0
+    mount "$EXISTING_GRUB_PART" "$OTHER_MOUNT" &&
+        mount --bind /dev "$OTHER_MOUNT/dev" &&
+        mount --bind /proc "$OTHER_MOUNT/proc" &&
+        mount --bind /sys "$OTHER_MOUNT/sys" &&
+        mount --bind /sys/firmware/efi/efivars "$OTHER_MOUNT/sys/firmware/efi/efivars" &&
+        chroot "$OTHER_MOUNT" sh -c 'command -v grub-mkconfig >/dev/null 2>&1 && command -v os-prober >/dev/null 2>&1' &&
+        chroot "$OTHER_MOUNT" sh -c '
+            sed -i "/^GRUB_DISABLE_OS_PROBER=/d" /etc/default/grub 2>/dev/null
+            echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
+            grub-mkconfig -o /boot/grub/grub.cfg
+        ' &&
+        MERGE_OK=1
+
+    # unmount whatever actually got mounted, deepest first - each one
+    # silently no-ops if that particular mount never happened
+    umount "$OTHER_MOUNT/sys/firmware/efi/efivars" 2>/dev/null
+    umount "$OTHER_MOUNT/sys" 2>/dev/null
+    umount "$OTHER_MOUNT/proc" 2>/dev/null
+    umount "$OTHER_MOUNT/dev" 2>/dev/null
+    umount "$OTHER_MOUNT" 2>/dev/null
+    rmdir "$OTHER_MOUNT" 2>/dev/null
+    set -e
+
+    [ "$MERGE_OK" = "1" ]
+}
+
 bootloader_install() {
+    scan_for_existing_grub
+    if [ -n "$EXISTING_GRUB_PART" ]; then
+        echo "Found an existing GRUB install on $EXISTING_GRUB_PART, adding Kira to it..."
+        if add_kira_to_existing_grub; then
+            echo "Kira added to the existing bootloader on $EXISTING_GRUB_PART."
+            return
+        fi
+        echo "Couldn't merge into it (missing grub-mkconfig/os-prober there), installing a separate bootloader instead..."
+    fi
+
     if [ "$PARTITION_MODE" = "1" ]; then
         echo "Installing GRUB..."
         chroot $MOUNT_POINT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Kira Linux"

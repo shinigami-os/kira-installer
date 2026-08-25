@@ -428,21 +428,32 @@ packages_install() {
     fi
 }
 
+# grub-probe sometimes can't resolve the root UUID inside the chroot and grub-mkconfig
+# silently falls back to a raw /dev/nvmeXnYpZ path, which breaks on reboot if NVMe
+# enumeration order shifts - force it to the UUID fstab already uses successfully
+fix_grub_root_uuid() {
+    sed -i "s#root=$ROOT_PART#root=UUID=$(blkid -s UUID -o value $ROOT_PART)#" \
+        "$MOUNT_POINT/boot/grub/grub.cfg"
+}
+
 bootloader_install() {
     if [ "$PARTITION_MODE" = "1" ]; then
         echo "Installing GRUB..."
         chroot $MOUNT_POINT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="$HOSTNAME"
         chroot $MOUNT_POINT grub-mkconfig -o /boot/grub/grub.cfg
+        fix_grub_root_uuid
     else
         echo "Updating existing bootloader..."
         if [ "$ESP_EXTERNAL" = "1" ]; then
             mount "$ESP_PART" "$MOUNT_POINT/boot/efi"
             chroot $MOUNT_POINT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="$HOSTNAME"
             chroot $MOUNT_POINT grub-mkconfig -o /boot/grub/grub.cfg
+            fix_grub_root_uuid
             umount "$MOUNT_POINT/boot/efi"
         else
             chroot $MOUNT_POINT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="$HOSTNAME"
             chroot $MOUNT_POINT grub-mkconfig -o /boot/grub/grub.cfg
+            fix_grub_root_uuid
         fi
     fi
 }

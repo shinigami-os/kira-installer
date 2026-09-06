@@ -12,7 +12,7 @@ ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
 INITRAMFS_IMAGE="/installer/initramfs.cpio.gz"
-PACKAGES="shadow zsh zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano sudo build-essential"
+PACKAGES="shadow zsh kira-zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano sudo build-essential"
 PACKAGES_SWAYFX="kira-desktop-swayFX netsurf git greetd"
 PACKAGES_SLEEX="kira-desktop-sleex netsurf git greetd"
 TARBALL="/installer/kira-base.tar.gz"
@@ -510,7 +510,7 @@ main() {
     # useradd -m copies /etc/skel into the new home right away - kira-branding
     # is what actually populates .zshrc/.p10k.zsh there, so it has to land
     # before user_setup too, not later in packages_install like the rest.
-    # kira-branding pulls in zsh and zsh-plugins itself via its own deps.
+    # kira-branding pulls in zsh and kira-zsh-plugins itself via its own deps.
     chroot $MOUNT_POINT flux install -y kira-branding
     user_setup
     select_tier

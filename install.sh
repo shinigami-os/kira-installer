@@ -419,12 +419,12 @@ packages_install() {
         done
     fi
     if has_intel_wifi; then
-        echo "Intel WiFi detected, installing iwlwifi-firmware..."
-        chroot $MOUNT_POINT flux install -y iwlwifi-firmware
+        echo "Intel WiFi detected, installing linux-firmware-intel..."
+        chroot $MOUNT_POINT flux install -y linux-firmware-intel
     fi
     if has_nvidia_gpu; then
-        echo "NVIDIA GPU detected, installing nouveau-firmware..."
-        chroot $MOUNT_POINT flux install -y nouveau-firmware
+        echo "NVIDIA GPU detected, installing linux-firmware-nvidia..."
+        chroot $MOUNT_POINT flux install -y linux-firmware-nvidia
     fi
 }
 

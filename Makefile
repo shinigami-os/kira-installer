@@ -67,7 +67,7 @@ build/live-rootfs-console.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux update; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-installer-tools; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-net; \
-	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y iwlwifi-firmware; \
+	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y linux-firmware-intel; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-login; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-seat; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-session-bus; \
@@ -103,14 +103,14 @@ build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux update; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-installer-tools; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-net; \
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y iwlwifi-firmware; \
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y linux-firmware-intel; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-seat; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-session-bus; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh-plugins; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-branding; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-desktop-$(DE); \
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y nouveau-firmware; \
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y linux-firmware-nvidia; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-live-session
 	sudo cp -r $(ROOT_DESKTOP)/etc/skel/. $(ROOT_DESKTOP)/root/
 

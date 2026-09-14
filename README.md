@@ -23,7 +23,7 @@ Both variants boot through the same minimal `switch_root` initramfs kira-base pr
 
 ## Build pipeline
 
-Requires `../shinigami` and `../kira-base` built first (the Makefile checks for `shinigami/arch/x86/boot/bzImage` and `kira-base/build/{rootfs.tar.gz,initramfs.cpio.gz}` and fails loudly with the exact command to run if either is missing):
+Requires `../shinigami` and `../kira-base` built first (the Makefile checks for `shinigami/arch/x86/boot/bzImage` and `kira-base/build/{rootfs.tar.xz,initramfs.cpio.gz}` and fails loudly with the exact command to run if either is missing):
 
 ```sh
 make -C ../shinigami
@@ -32,12 +32,12 @@ make console          # or: make desktop DE=sleex
 ```
 
 Per variant, the pipeline:
-1. Extracts kira-base's `rootfs.tar.gz` into a scratch chroot (`/tmp/kira-installer-root-console` or `-desktop`).
+1. Extracts kira-base's `rootfs.tar.xz` into a scratch chroot (`/tmp/kira-installer-root-console` or `-desktop`).
 2. Bind-mounts `/proc`, `/sys`, `/dev`, `/dev/pts`, copies in a working `resolv.conf`.
 3. Runs `flux update` + `flux install -y <pkg>` inside the chroot for the packages every install needs regardless of tier: `kira-installer-tools`, `kira-net`, `linux-firmware-intel`, `kira-login`, `kira-seat`, `kira-session-bus`, `zsh`, `zsh-plugins`, `kira-branding`. For the desktop variant, also installs `kira-desktop-swayFX` or `kira-desktop-sleex` depending on `DE`, plus `linux-firmware-nvidia`. Both firmware packages are unconditional here (unlike `install.sh`'s own hardware-detected install onto the target disk) since the live/try-before-install session needs working display and wifi hardware too, before any of that detection ever runs.
 4. Writes `/etc/kira-tier` (`server` or `desktop`) into the chroot : this is the ISO's own coarse tier, read again and refined at install time (see below).
 5. Copies `install.sh` into the chroot as `/usr/bin/kira-install`, stages the kernel/initramfs/rootfs tarball under `/installer/` so the installed system's own bootstrapping has something to start from.
-6. Repacks the whole chroot into `live-rootfs-{console,desktop}.tar.gz` : this is what the live ISO actually extracts into tmpfs at boot, **not** a bootable initramfs itself.
+6. Repacks the whole chroot into `live-rootfs-{console,desktop}.tar.xz` : this is what the live ISO actually extracts into tmpfs at boot, **not** a bootable initramfs itself.
 7. Assembles the ISO: `bzImage` + `initramfs.cpio.gz` + the rootfs tarball + a GRUB EFI image (`grub-mkimage`, `BOOTX64.EFI`) at the ISO9660 root, via `xorriso`.
 
 `make qemu-console` / `make qemu-desktop DE=<de>` boot the resulting ISO directly in QEMU with OVMF, serial console attached.
@@ -49,7 +49,7 @@ Runs as `kira-install` from inside the live environment. Fully guided, no non-in
 1. **Network** : `nmcli` device/SSID prompts (wifi or ethernet), confirms connectivity with a ping.
 2. **Partitioning** : guided whole-disk (wipes and creates GPT: ESP + optional swap + ext4 root) or guided free-space (finds the largest free region on an existing disk, partitions just that). Full manual mode is a documented stub (`3) not implemented`).
 3. **Format + mount** : `mkfs.fat`/`mkfs.ext4`/`mkswap` as needed, mounts under `/mnt`.
-4. **Base system** : extracts the staged `kira-base.tar.gz` onto the target, excluding runtime-only paths (`/tmp`, `/proc`, `/sys`, `/dev`, `/mnt`, `/run`, flux's cache/installed-db dirs), then recreates them empty.
+4. **Base system** : extracts the staged `kira-base.tar.xz` onto the target, excluding runtime-only paths (`/tmp`, `/proc`, `/sys`, `/dev`, `/mnt`, `/run`, flux's cache/installed-db dirs), then recreates them empty.
 5. **Kernel + fstab + hostname** : copies `bzImage`/`initramfs.cpio.gz` to `/boot` under a real `uname`-style name, writes `/etc/fstab` from the actual partition UUIDs, prompts for a hostname.
 6. **Tier selection** : prompts `1) Sleex  2) SwayFX  3) server`, refining `/etc/kira-tier` from the ISO's coarse `desktop`/`server` value into `desktop-sleex` / `desktop-swayfx` / `server`, and drops a matching `~/.config/kira-desktop/active-de` for both `root` and the new user.
 7. **Package install** : chroots in, `flux update`, then the same tier-independent package set the ISO baked in, plus `kira-desktop-{sleex,swayFX}` + `netsurf` + `git` + `greetd` for whichever desktop tier was chosen. Detects Intel wifi hardware (`/sys/bus/pci/devices/*`, class `0x028*`) and installs `linux-firmware-intel` only when present.

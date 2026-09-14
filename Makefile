@@ -1,6 +1,6 @@
 KERNEL ?= ../shinigami/arch/x86/boot/bzImage
 KIRA_BASE_INITRAMFS ?= ../kira-base/build/initramfs.cpio.gz
-KIRA_BASE_ROOTFS ?= ../kira-base/build/rootfs.tar.gz
+KIRA_BASE_ROOTFS ?= ../kira-base/build/rootfs.tar.xz
 # Choose DE between sleex, swayFX
 DE ?= sleex
 
@@ -43,7 +43,7 @@ $(KIRA_BASE_ROOTFS):
 	@echo "ERROR: kira-base rootfs not built. Run: make -C ../kira-base"
 	@exit 1
 
-build/kira-base.tar.gz: $(KIRA_BASE_ROOTFS) | build/
+build/kira-base.tar.xz: $(KIRA_BASE_ROOTFS) | build/
 	cp $(KIRA_BASE_ROOTFS) $@
 
 # These produce a tarball of the fully provisioned chroot, it's NOT a bootable
@@ -51,12 +51,12 @@ build/kira-base.tar.gz: $(KIRA_BASE_ROOTFS) | build/
 # initramfs (same one used on the installed disk); that initramfs finds
 # this tarball on the boot media itself (at the ISO9660 root, see
 # build/kira-*.iso below) and extracts it into a tmpfs before switch_root.
-build/live-rootfs-console.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) install.sh | build/
+build/live-rootfs-console.tar.xz: build/kira-base.tar.xz $(KIRA_BASE_INITRAMFS) install.sh | build/
 	@echo "needs to run as root"
 	$(call UNMOUNT_CHROOT,$(ROOT_CONSOLE))
 	sudo rm -rf $(ROOT_CONSOLE)
 	mkdir -p $(ROOT_CONSOLE)
-	tar -xzpf $(KIRA_BASE_ROOTFS) -C $(ROOT_CONSOLE)
+	tar -xJpf $(KIRA_BASE_ROOTFS) -C $(ROOT_CONSOLE)
 	set -e; \
 	trap '$(call UNMOUNT_CHROOT,$(ROOT_CONSOLE))' EXIT; \
 	sudo mount --bind /proc $(ROOT_CONSOLE)/proc; \
@@ -72,27 +72,27 @@ build/live-rootfs-console.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-seat; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-session-bus; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y zsh; \
-	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y zsh-plugins; \
+	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-zsh-plugins; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-branding
 	echo "server" > $(ROOT_CONSOLE)/etc/kira-tier
 	cp install.sh $(ROOT_CONSOLE)/usr/bin/kira-install
 	chmod +x $(ROOT_CONSOLE)/usr/bin/kira-install
 	mkdir -p $(ROOT_CONSOLE)/installer
-	cp build/kira-base.tar.gz $(ROOT_CONSOLE)/installer/kira-base.tar.gz
+	cp build/kira-base.tar.xz $(ROOT_CONSOLE)/installer/kira-base.tar.xz
 	cp $(KERNEL) $(ROOT_CONSOLE)/installer/bzImage
 	cp $(KIRA_BASE_INITRAMFS) $(ROOT_CONSOLE)/installer/initramfs.cpio.gz
 	# every flux install above left its downloaded/built .tar.zst behind here -
 	# that's the same content already extracted onto the filesystem, shipping
 	# both roughly doubles the cost of every package pulled into this chroot
 	sudo rm -rf $(ROOT_CONSOLE)/var/cache/flux/*
-	sudo tar -czpf $(CURDIR)/build/live-rootfs-console.tar.gz --numeric-owner -C $(ROOT_CONSOLE) .
+	sudo tar -cJpf $(CURDIR)/build/live-rootfs-console.tar.xz --numeric-owner -C $(ROOT_CONSOLE) .
 
-build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) install.sh | build/
+build/live-rootfs-desktop.tar.xz: build/kira-base.tar.xz $(KIRA_BASE_INITRAMFS) install.sh | build/
 	@echo "needs to run as root"
 	$(call UNMOUNT_CHROOT,$(ROOT_DESKTOP))
 	sudo rm -rf $(ROOT_DESKTOP)
 	mkdir -p $(ROOT_DESKTOP)
-	tar -xzpf $(KIRA_BASE_ROOTFS) -C $(ROOT_DESKTOP)
+	tar -xJpf $(KIRA_BASE_ROOTFS) -C $(ROOT_DESKTOP)
 	set -e; \
 	trap '$(call UNMOUNT_CHROOT,$(ROOT_DESKTOP))' EXIT; \
 	sudo mount --bind /proc $(ROOT_DESKTOP)/proc; \
@@ -107,7 +107,7 @@ build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-seat; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-session-bus; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh; \
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y zsh-plugins; \
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-zsh-plugins; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-branding; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-desktop-$(DE); \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y linux-firmware-nvidia; \
@@ -121,14 +121,14 @@ build/live-rootfs-desktop.tar.gz: build/kira-base.tar.gz $(KIRA_BASE_INITRAMFS) 
 	cp install.sh $(ROOT_DESKTOP)/usr/bin/kira-install
 	chmod +x $(ROOT_DESKTOP)/usr/bin/kira-install
 	mkdir -p $(ROOT_DESKTOP)/installer
-	cp build/kira-base.tar.gz $(ROOT_DESKTOP)/installer/kira-base.tar.gz
+	cp build/kira-base.tar.xz $(ROOT_DESKTOP)/installer/kira-base.tar.xz
 	cp $(KERNEL) $(ROOT_DESKTOP)/installer/bzImage
 	cp $(KIRA_BASE_INITRAMFS) $(ROOT_DESKTOP)/installer/initramfs.cpio.gz
 	# every flux install above left its downloaded/built .tar.zst behind here -
 	# that's the same content already extracted onto the filesystem, shipping
 	# both roughly doubles the cost of every package pulled into this chroot
 	sudo rm -rf $(ROOT_DESKTOP)/var/cache/flux/*
-	sudo tar -czpf $(CURDIR)/build/live-rootfs-desktop.tar.gz --numeric-owner -C $(ROOT_DESKTOP) .
+	sudo tar -cJpf $(CURDIR)/build/live-rootfs-desktop.tar.xz --numeric-owner -C $(ROOT_DESKTOP) .
 
 build/BOOTX64.EFI: grub.cfg grub-early.cfg | build/
 	grub-mkimage \
@@ -140,12 +140,12 @@ build/BOOTX64.EFI: grub.cfg grub-early.cfg | build/
 		search search_fs_uuid search_fs_file search_label \
 		ls cat help reboot halt
 
-build/kira-console.iso: build/live-rootfs-console.tar.gz $(KIRA_BASE_INITRAMFS) $(KERNEL) build/BOOTX64.EFI | build/
+build/kira-console.iso: build/live-rootfs-console.tar.xz $(KIRA_BASE_INITRAMFS) $(KERNEL) build/BOOTX64.EFI | build/
 	mkdir -p build/iso-root-console/boot
 	mkdir -p build/iso-root-console/EFI/BOOT
 	cp $(KERNEL) build/iso-root-console/boot/bzImage
 	cp $(KIRA_BASE_INITRAMFS) build/iso-root-console/boot/initramfs.cpio.gz
-	cp build/live-rootfs-console.tar.gz build/iso-root-console/live-rootfs.tar.gz
+	cp build/live-rootfs-console.tar.xz build/iso-root-console/live-rootfs.tar.xz
 	cp build/BOOTX64.EFI build/iso-root-console/EFI/BOOT/BOOTX64.EFI
 	cp grub.cfg build/iso-root-console/EFI/BOOT/grub.cfg
 	dd if=/dev/zero of=build/efi-console.img bs=1M count=4
@@ -163,12 +163,12 @@ build/kira-console.iso: build/live-rootfs-console.tar.gz $(KIRA_BASE_INITRAMFS) 
 		-append_partition 2 0xef build/efi-console.img \
 		build/iso-root-console/
 
-build/kira-desktop-$(DE).iso: build/live-rootfs-desktop.tar.gz $(KIRA_BASE_INITRAMFS) $(KERNEL) build/BOOTX64.EFI | build/
+build/kira-desktop-$(DE).iso: build/live-rootfs-desktop.tar.xz $(KIRA_BASE_INITRAMFS) $(KERNEL) build/BOOTX64.EFI | build/
 	mkdir -p build/iso-root-desktop/boot
 	mkdir -p build/iso-root-desktop/EFI/BOOT
 	cp $(KERNEL) build/iso-root-desktop/boot/bzImage
 	cp $(KIRA_BASE_INITRAMFS) build/iso-root-desktop/boot/initramfs.cpio.gz
-	cp build/live-rootfs-desktop.tar.gz build/iso-root-desktop/live-rootfs.tar.gz
+	cp build/live-rootfs-desktop.tar.xz build/iso-root-desktop/live-rootfs.tar.xz
 	cp build/BOOTX64.EFI build/iso-root-desktop/EFI/BOOT/BOOTX64.EFI
 	cp grub.cfg build/iso-root-desktop/EFI/BOOT/grub.cfg
 	dd if=/dev/zero of=build/efi-desktop.img bs=1M count=4

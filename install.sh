@@ -15,7 +15,7 @@ INITRAMFS_IMAGE="/installer/initramfs.cpio.gz"
 PACKAGES="shadow zsh kira-zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus make zlib flex bison pkgconf util-linux os-prober grub efivar efibootmgr nano sudo build-essential"
 PACKAGES_SWAYFX="kira-desktop-swayFX netsurf git greetd"
 PACKAGES_SLEEX="kira-desktop-sleex netsurf git greetd"
-TARBALL="/installer/kira-base.tar.gz"
+TARBALL="/installer/kira-base.tar.xz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
 
 check_root() {
@@ -252,7 +252,7 @@ mount_partition() {
 
 copy_tarball() {
     echo "Installing base system..."
-    tar -xzpf "$TARBALL" -C "$MOUNT_POINT" \
+    tar -xJpf "$TARBALL" -C "$MOUNT_POINT" \
         --exclude=./tmp \
         --exclude=./proc \
         --exclude=./sys  \

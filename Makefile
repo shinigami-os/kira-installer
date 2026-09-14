@@ -8,8 +8,7 @@ DE ?= sleex
 ROOT_CONSOLE = /tmp/kira-installer-root-console
 ROOT_DESKTOP = /tmp/kira-installer-root-desktop
 
-# umount -R refuses to recurse unless the given path is itself a mountpoint
-# so unmount each bind mount explicitly, innermost first.
+# umount -R needs the path itself to be a mountpoint, so unmount each bind mount explicitly
 UNMOUNT_CHROOT = sudo umount $(1)/dev/pts 2>/dev/null; sudo umount $(1)/dev 2>/dev/null; sudo umount $(1)/sys 2>/dev/null; sudo umount $(1)/proc 2>/dev/null; true
 
 .PHONY: all clean unmount-stale qemu-console qemu-desktop console desktop
@@ -46,11 +45,7 @@ $(KIRA_BASE_ROOTFS):
 build/kira-base.tar.xz: $(KIRA_BASE_ROOTFS) | build/
 	cp $(KIRA_BASE_ROOTFS) $@
 
-# These produce a tarball of the fully provisioned chroot, it's NOT a bootable
-# initramfs. The live ISO boots through kira-base's minimal switch_root
-# initramfs (same one used on the installed disk); that initramfs finds
-# this tarball on the boot media itself (at the ISO9660 root, see
-# build/kira-*.iso below) and extracts it into a tmpfs before switch_root.
+# tarball of the provisioned chroot, extracted into tmpfs at boot by kira-base's switch_root initramfs
 build/live-rootfs-console.tar.xz: build/kira-base.tar.xz $(KIRA_BASE_INITRAMFS) install.sh | build/
 	@echo "needs to run as root"
 	$(call UNMOUNT_CHROOT,$(ROOT_CONSOLE))
@@ -81,9 +76,9 @@ build/live-rootfs-console.tar.xz: build/kira-base.tar.xz $(KIRA_BASE_INITRAMFS) 
 	cp build/kira-base.tar.xz $(ROOT_CONSOLE)/installer/kira-base.tar.xz
 	cp $(KERNEL) $(ROOT_CONSOLE)/installer/bzImage
 	cp $(KIRA_BASE_INITRAMFS) $(ROOT_CONSOLE)/installer/initramfs.cpio.gz
-	# every flux install above left its downloaded/built .tar.zst behind here -
-	# that's the same content already extracted onto the filesystem, shipping
-	# both roughly doubles the cost of every package pulled into this chroot
+	# drop build-only packages (gcc, cmake, -dev headers, ...) pulled in above
+	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux autoremove
+	# the .tar.zst cache is redundant with the files already extracted onto disk
 	sudo rm -rf $(ROOT_CONSOLE)/var/cache/flux/*
 	sudo tar -cJpf $(CURDIR)/build/live-rootfs-console.tar.xz --numeric-owner -C $(ROOT_CONSOLE) .
 
@@ -124,9 +119,9 @@ build/live-rootfs-desktop.tar.xz: build/kira-base.tar.xz $(KIRA_BASE_INITRAMFS) 
 	cp build/kira-base.tar.xz $(ROOT_DESKTOP)/installer/kira-base.tar.xz
 	cp $(KERNEL) $(ROOT_DESKTOP)/installer/bzImage
 	cp $(KIRA_BASE_INITRAMFS) $(ROOT_DESKTOP)/installer/initramfs.cpio.gz
-	# every flux install above left its downloaded/built .tar.zst behind here -
-	# that's the same content already extracted onto the filesystem, shipping
-	# both roughly doubles the cost of every package pulled into this chroot
+	# drop build-only packages (gcc, cmake, -dev headers, ...) pulled in above
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux autoremove
+	# the .tar.zst cache is redundant with the files already extracted onto disk
 	sudo rm -rf $(ROOT_DESKTOP)/var/cache/flux/*
 	sudo tar -cJpf $(CURDIR)/build/live-rootfs-desktop.tar.xz --numeric-owner -C $(ROOT_DESKTOP) .
 

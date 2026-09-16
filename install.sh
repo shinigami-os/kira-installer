@@ -425,6 +425,11 @@ packages_install() {
     for pkg in $PACKAGES; do
         chroot $MOUNT_POINT flux install -y "$pkg"
     done
+    # Alpine's sudo package ships this rule commented out by default - without
+    # it, wheel membership (set on the user in user_setup) grants nothing and
+    # sudo just says "not in the sudoers file", not a login problem itself but
+    # exactly as confusing as one
+    sed -i 's/^# %wheel ALL=(ALL:ALL) ALL$/%wheel ALL=(ALL:ALL) ALL/' "$MOUNT_POINT/etc/sudoers"
     if [ "$KIRA_TIER" = "desktop-sleex" ]; then
         echo "Installing desktop packages (Sleex)..."
         for pkg in $PACKAGES_SLEEX; do

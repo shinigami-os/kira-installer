@@ -53,7 +53,7 @@ Runs as `kira-install` from inside the live environment. Fully guided, no non-in
 5. **Kernel + fstab + hostname** : copies `bzImage`/`initramfs.cpio.gz` to `/boot` under a real `uname`-style name, writes `/etc/fstab` from the actual partition UUIDs, prompts for a hostname.
 6. **Tier selection** : prompts `1) Sleex  2) SwayFX  3) server`, refining `/etc/kira-tier` from the ISO's coarse `desktop`/`server` value into `desktop-sleex` / `desktop-swayfx` / `server`, and drops a matching `~/.config/kira-desktop/active-de` for both `root` and the new user.
 7. **Package install** : chroots in, `flux update`, then the same tier-independent package set the ISO baked in, plus `kira-desktop-{sleex,swayFX}` + `netsurf` + `git` + `greetd` for whichever desktop tier was chosen. Detects Intel wifi hardware (`/sys/bus/pci/devices/*`, class `0x028*`) and installs `linux-firmware-intel` only when present.
-8. **Users** : root password, then a new user (`kira` if left blank) in `wheel,video,input,audio`, `/usr/bin/zsh` as shell.
+8. **Users** : root password, then a new user (`kira` if left blank) in `wheel,video,input,audio`, `/bin/zsh` as shell.
 9. **Bootloader** : `grub-install --target=x86_64-efi` + `grub-mkconfig`, either onto the ESP this run just created or an existing one found elsewhere on the disk.
 10. **Cleanup + reboot prompt.**
 

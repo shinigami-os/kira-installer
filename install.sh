@@ -18,42 +18,6 @@ PACKAGES_SLEEX="kira-desktop-sleex netsurf git greetd"
 TARBALL="/installer/kira-base.tar.xz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
 
-# BusyBox's lsblk takes no options at all (not -d, -o, -n, nothing - just a
-# bare device list with its own fixed columns), so listing/formatting disks
-# is done by hand from sysfs instead of lsblk everywhere below.
-
-# real disks only, one name per line - excludes partitions and virtual block
-# devices (loop images, the live ISO's own optical device, zram)
-list_disk_names() {
-    for d in /sys/block/*; do
-        name=$(basename "$d")
-        case "$name" in
-            loop*|sr*|zram*|ram*) continue ;;
-        esac
-        echo "$name"
-    done
-}
-
-list_disks_table() {
-    printf "%-12s %-8s %s\n" "NAME" "SIZE" "MODEL"
-    for name in $(list_disk_names); do
-        sectors=$(cat "/sys/block/$name/size" 2>/dev/null || echo 0)
-        size=$(awk -v s="$sectors" 'BEGIN { printf "%.1fG", s * 512 / 1024 / 1024 / 1024 }')
-        model=$(cat "/sys/block/$name/device/model" 2>/dev/null || echo "-")
-        printf "%-12s %-8s %s\n" "$name" "$size" "$model"
-    done
-}
-
-# given a partition (e.g. sda1) or a disk (e.g. sda), prints the disk name
-get_parent_disk() {
-    dev_name=$(basename "$1")
-    if [ -e "/sys/class/block/$dev_name/partition" ]; then
-        basename "$(dirname "$(readlink -f "/sys/class/block/$dev_name")")"
-    else
-        echo "$dev_name"
-    fi
-}
-
 check_root() {
     echo "Checking root..."
     if [ "$(id -u)" -ne 0 ]; then
@@ -105,17 +69,15 @@ select_partition_mode() {
 get_live_disk() {
     # best-effort: find the physical disk backing the live/installer medium
     # (e.g. the boot USB) so we can warn/refuse if it's selected as the target
-    # findmnt isn't a busybox applet - read /proc/mounts directly instead
-    LIVE_SRC=$(awk '$2 == "/installer" { print $1; exit }' /proc/mounts)
-    [ -z "$LIVE_SRC" ] && LIVE_SRC=$(awk '$2 == "/" { print $1; exit }' /proc/mounts)
+    LIVE_SRC=$(findmnt -no SOURCE /installer 2>/dev/null || findmnt -no SOURCE / 2>/dev/null)
     [ -z "$LIVE_SRC" ] && return 0
     LIVE_SRC=$(readlink -f "$LIVE_SRC" 2>/dev/null || echo "$LIVE_SRC")
-    get_parent_disk "$LIVE_SRC"
+    lsblk -no PKNAME "$LIVE_SRC" 2>/dev/null | head -1
 }
 
 select_disk() {
     echo "Disk selection..."
-    list_disks_table
+    lsblk -d -o NAME,SIZE,MODEL
     LIVE_DISK=$(get_live_disk)
     if [ -n "$LIVE_DISK" ]; then
         echo "(note: $LIVE_DISK appears to be the live/installer medium itself)"
@@ -139,7 +101,7 @@ select_disk() {
 confirm_disk() {
     echo
     echo "About to COMPLETELY WIPE and repartition $TARGET_DISK:"
-    lsblk "$TARGET_DISK"
+    lsblk "$TARGET_DISK" -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT
     echo
     echo "/!\ ALL DATA on $TARGET_DISK will be permanently destroyed. /!\ "
     read -p "Type the disk name ($TARGET_DISK_SHORT) to confirm, or anything else to abort: " CONFIRM
@@ -152,7 +114,7 @@ confirm_disk() {
 confirm_free_space() {
     echo
     echo "Current layout of $TARGET_DISK:"
-    lsblk "$TARGET_DISK"
+    lsblk "$TARGET_DISK" -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT
     echo
     echo "/!\ Confirm ? New partitions will be created in the free space on $TARGET_DISK. Existing partitions are left untouched. /!\ "
     read -p "Type the disk name ($TARGET_DISK_SHORT) to confirm, or anything else to abort: " CONFIRM
@@ -174,7 +136,7 @@ find_esp() {
         return
     fi
     TARGET_SHORT=$(basename "$TARGET_DISK")
-    for i in $(list_disk_names); do
+    for i in $(lsblk -d -o NAME --noheadings); do
         [ "$i" = "$TARGET_SHORT" ] && continue
         ESP_NUM=$(parted -s "/dev/$i" print 2>/dev/null | awk '/esp/{print $1}' | head -1)
         if [ -n "$ESP_NUM" ]; then

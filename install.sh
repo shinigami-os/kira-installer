@@ -230,6 +230,25 @@ write_partition() {
 
 format_partition() {
     echo "Partition formatting..."
+    # parted returns as soon as it writes the partition table, before the
+    # kernel/udev have necessarily created the new partition device nodes yet
+    # (especially common on NVMe) - without this, mkfs can race ahead and fail
+    # with "No such file or directory" on a partition that's about to exist
+    partprobe "$TARGET_DISK" 2>/dev/null || true
+    udevadm settle 2>/dev/null || true
+    for part in "$ESP_PART" "$ROOT_PART" "$SWAP_PART"; do
+        [ -z "$part" ] && continue
+        i=0
+        while [ ! -b "$part" ] && [ $i -lt 15 ]; do
+            sleep 1
+            i=$((i + 1))
+        done
+        if [ ! -b "$part" ]; then
+            echo "Error: $part never appeared after partitioning. Aborting."
+            exit 1
+        fi
+    done
+
     if [ "$PARTITION_MODE" = "1" ]; then
         mkfs.fat -F 32 "$ESP_PART"
     fi

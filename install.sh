@@ -12,7 +12,7 @@ ESP_EXTERNAL=0
 MOUNT_POINT="/mnt"
 KERNEL_IMAGE="/installer/bzImage"
 INITRAMFS_IMAGE="/installer/initramfs.cpio.gz"
-PACKAGES="shadow zsh kira-zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus zlib flex bison pkgconf kira-basic-tools kira-build-essential os-prober grub efivar efibootmgr nano sudo"
+PACKAGES="shadow zsh kira-zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus zlib flex bison pkgconf kira-basic-tools kira-build-essential os-prober grub efivar efibootmgr nano sudo git"
 PACKAGES_SWAYFX="kira-desktop-swayFX netsurf git greetd"
 PACKAGES_SLEEX="kira-desktop-sleex netsurf git greetd"
 TARBALL="/installer/kira-base.tar.xz"
@@ -525,6 +525,12 @@ main() {
     # (set in user_setup) and packages_install needs $KIRA_TIER (set in
     # select_tier) - so pull shadow in on its own ahead of everything else
     chroot $MOUNT_POINT flux update
+    # flux's own update falls back to a plain tarball download the first time
+    # git isn't there, but every update after that assumes git and just runs
+    # "git -C ... pull" - installing it now (still git-independent, a plain
+    # Alpine package fetch) keeps every later flux update in this chroot from
+    # breaking, instead of only the very first one being tolerant of it
+    chroot $MOUNT_POINT flux install -y git
     chroot $MOUNT_POINT flux install -y shadow
     # useradd -m copies /etc/skel into the new home right away - kira-branding
     # is what actually populates .zshrc/.p10k.zsh there, so it has to land

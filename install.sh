@@ -26,6 +26,38 @@ check_root() {
     fi
 }
 
+select_keymap() {
+    echo "Keyboard layout selection..."
+    KEYMAP_LIB="/usr/share/kira-keymaps"
+    # numbered off whatever the live image actually ships (same library
+    # kira-branding installs into the target below), not a hardcoded list -
+    # so this never drifts out of sync with what's actually available
+    i=0
+    KEYMAP_NAMES=""
+    for f in "$KEYMAP_LIB"/*.bmap; do
+        [ -f "$f" ] || continue
+        i=$((i + 1))
+        name=$(basename "$f" .bmap)
+        KEYMAP_NAMES="$KEYMAP_NAMES $name"
+        default_tag=""
+        [ "$name" = "us" ] && default_tag=" (default)"
+        echo "  $i) $name$default_tag"
+    done
+    read -p "Select a keyboard layout number, or press enter for us (QWERTY): " KEYMAP_NUM
+    if [ -z "$KEYMAP_NUM" ]; then
+        KEYMAP_CHOICE="us"
+    else
+        KEYMAP_CHOICE=$(echo "$KEYMAP_NAMES" | tr ' ' '\n' | sed -n "${KEYMAP_NUM}p")
+        if [ -z "$KEYMAP_CHOICE" ]; then
+            echo "Invalid selection, defaulting to us (QWERTY)."
+            KEYMAP_CHOICE="us"
+        fi
+    fi
+    # apply it to this live session too, so typing the hostname/passwords/wifi
+    # SSID below already happens on the chosen layout, not just the installed one
+    loadkmap < "$KEYMAP_LIB/$KEYMAP_CHOICE.bmap" 2>/dev/null || true
+}
+
 network_setup() {
     echo "Network setup..."
     nmcli device status
@@ -514,6 +546,7 @@ finish() {
 main() {
     echo "Welcome to Kira Linux installer !"
     check_root
+    select_keymap
     network_setup
     select_partition_mode
     format_partition
@@ -542,6 +575,15 @@ main() {
     # before user_setup too, not later in packages_install like the rest.
     # kira-branding pulls in zsh and kira-zsh-plugins itself via its own deps.
     chroot $MOUNT_POINT flux install -y kira-branding
+    # kira-branding just seeded /etc/keymaps/us.bmap as the default active
+    # layout - swap it for whatever was picked in select_keymap, unless that
+    # was already us. Target's own copy of the library (installed by the
+    # same package) is used rather than the live image's, since it's
+    # guaranteed to exist at this point regardless of how the ISO was built
+    if [ "$KEYMAP_CHOICE" != "us" ]; then
+        rm -f "$MOUNT_POINT/etc/keymaps"/*.bmap
+        cp "$MOUNT_POINT/usr/share/kira-keymaps/$KEYMAP_CHOICE.bmap" "$MOUNT_POINT/etc/keymaps/"
+    fi
     user_setup
     select_tier
     packages_install

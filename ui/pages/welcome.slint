@@ -31,6 +31,17 @@ export component WelcomePage inherits Rectangle {
         }
     }
 
+    // TEMPORARY diagnostic: a photo of the physical screen can't be measured reliably (lens
+    // parallax, angle, reflections all shift the apparent position), so this is a known-good
+    // reference line at the exact programmatic horizontal center to check the text against
+    // with the naked eye on the real laptop instead. Remove once centering is confirmed.
+    Rectangle {
+        x: parent.width / 2 - 1px;
+        width: 2px;
+        height: 100%;
+        background: Palette.secondary;
+    }
+
     VerticalLayout {
         // a layout element doesn't fill its parent by default either - without this it sizes
         // to its own content (the logo + text block) and sits near the top-left corner of the

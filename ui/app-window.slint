@@ -4,12 +4,11 @@ import { WelcomePage } from "pages/welcome.slint";
 export component AppWindow inherits Window {
     title: "Kira Installer";
     background: Palette.base;
-    // only matters when running under a desktop Slint backend for local dev (`cargo run`
-    // without the linuxkms feature) - confirmed live on kira2 that the LinuxKMS backend
-    // always sizes the window from the real DRM mode (1920x1080 there) regardless of this,
-    // so it's a pure no-op in the actual target environment
-    width: 1280px;
-    height: 720px;
+    // deliberately no explicit width/height - the content still rendered centered-but-small
+    // in the corner of the real 1920x1080 panel with 1280x720 declared here (confirmed live
+    // on kira2 via two screenshots), meaning Slint was laying everything out correctly inside
+    // that smaller logical canvas and the LinuxKMS backend was NOT overriding it with the
+    // real display's size - leaving this unset lets it pick up the actual DRM mode instead
 
     callback continue-pressed <=> welcome.continue-pressed;
     callback quit-requested <=> welcome.quit-requested;

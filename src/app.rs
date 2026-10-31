@@ -10,7 +10,7 @@ use crate::theme;
 
 // Temporary: grows as each build stage's screens land (see the implementation plan) - this
 // is not the final flow order until every step 1-13 is represented.
-const SCREEN_ORDER: &[ScreenId] = &[ScreenId::Welcome, ScreenId::Keymap];
+const SCREEN_ORDER: &[ScreenId] = &[ScreenId::Welcome, ScreenId::Keymap, ScreenId::Network];
 
 // TEMPORARY diagnostic: input appeared completely unresponsive under cage+foot during testing
 // (worked fine on the bare console) - this makes it directly checkable (cat the file) instead

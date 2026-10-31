@@ -1,0 +1,12 @@
+// Kira's real brand palette (kira-website design spec), not generic UI-toolkit defaults -
+// the same numbers that were in theme.rs for the ratatui prototype and in kira-branding's
+// fetch script, just living here now instead of as ratatui::style::Color consts.
+export global Palette {
+    out property <brush> base: #0a0a0f;
+    out property <brush> primary: #aa00ff;
+    out property <brush> text: #e8d8ff;
+    out property <brush> subtext: #b09acc;
+    // secondary/hot accent - reserved for error/warning text, mirrors the old theme_error()
+    // helper that lived in screens/keymap.rs
+    out property <brush> secondary: #ff00aa;
+}

@@ -1,0 +1,59 @@
+import { Palette } from "../palette.slint";
+
+export component WelcomePage inherits Rectangle {
+    background: Palette.base;
+
+    callback continue-pressed();
+    callback quit-requested();
+
+    // the LinuxKMS backend has no window manager to hand this window focus on our behalf -
+    // claim it ourselves as soon as this page exists, or no key press would ever reach it
+    init => { key-handler.focus(); }
+
+    key-handler := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Return) {
+                continue-pressed();
+                return accept;
+            }
+            if (event.text == "q" || event.text == "Q" || event.text == Key.Escape) {
+                quit-requested();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 24px;
+
+        Image {
+            source: @image-url("../../assets/kira-logo.png");
+            height: 160px;
+            image-fit: contain;
+        }
+
+        Text {
+            text: "Kira Linux";
+            color: Palette.primary;
+            font-size: 32px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: "a rolling-release, musl libc Linux distribution";
+            color: Palette.subtext;
+            font-size: 16px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: "Press Enter to begin  -  Q to quit";
+            color: Palette.subtext;
+            font-size: 14px;
+            horizontal-alignment: center;
+        }
+    }
+}

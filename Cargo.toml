@@ -6,13 +6,15 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.104"
 libc = "0.2.191"
-ratatui = "0.30.2"
-crossterm = "0.29"
-# DE-preview screenshots (step 8). default-features off to drop chafa-dyn - that needs
-# libchafa (a C library) at runtime via pkg-config, which the live ISO has no reason to carry
-# just for image rendering. "crossterm" picks the matching backend-detection glue, "image-defaults"
-# keeps the image crate's own default decoders (PNG/JPEG). Halfblocks (plain Unicode + truecolor)
-# is the fallback used whenever no graphics protocol is detected - the only mode that works on
-# the live ISO's bare VT console, which has no terminal emulator to negotiate Kitty/Sixel/iTerm2 with.
-ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm", "image-defaults"] }
+# default-features off to drop Wayland/X11/Qt/winit backend glue entirely - "noseat" skips
+# libseat too, since the installer already runs as root with no session to hand it off to
+# (see is_root() in main.rs). femtovg-over-OpenGL-ES2 instead of Skia/Vulkan for broader GPU
+# driver compatibility on install-target hardware we know nothing about ahead of time.
+slint = { version = "1.18.1", default-features = false, features = ["backend-linuxkms-noseat", "renderer-femtovg", "std", "compat-1-18"] }
+# still useful for one-time asset preprocessing (e.g. flattening the logo PNG's anti-aliased
+# edges onto solid black ahead of time) even though nothing here negotiates a terminal
+# graphics protocol anymore.
 image = "0.25"
+
+[build-dependencies]
+slint-build = "1.18.1"

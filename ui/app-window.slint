@@ -1,0 +1,17 @@
+import { Palette } from "palette.slint";
+import { WelcomePage } from "pages/welcome.slint";
+
+export component AppWindow inherits Window {
+    title: "Kira Installer";
+    background: Palette.base;
+    // only matters when running under a desktop Slint backend for local dev (`cargo run`
+    // without the linuxkms feature) - the real LinuxKMS backend owns the whole display and
+    // ignores requested window geometry
+    width: 1280px;
+    height: 720px;
+
+    callback continue-pressed <=> welcome.continue-pressed;
+    callback quit-requested <=> welcome.quit-requested;
+
+    welcome := WelcomePage {}
+}

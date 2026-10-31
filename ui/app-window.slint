@@ -1,10 +1,11 @@
 import { Palette } from "palette.slint";
 import { WelcomePage } from "pages/welcome.slint";
 import { KeymapPage } from "pages/keymap.slint";
+import { NetworkPage, NetMode } from "pages/network.slint";
 
 // grows as each build stage's pages land, same reasoning the old SCREEN_ORDER comment had -
 // not the final flow order until every step 1-13 is represented
-export enum Page { Welcome, Keymap }
+export enum Page { Welcome, Keymap, Network }
 
 export component AppWindow inherits Window {
     title: "Kira Installer";
@@ -25,6 +26,24 @@ export component AppWindow inherits Window {
     in property <int> keymap-selected;
     in property <string> keymap-apply-error;
 
+    // same on-enter-hook reasoning as keymap-entered above
+    callback network-entered();
+    callback network-device-chosen(int);
+    callback network-ssid-chosen(int);
+    callback network-password-char(string);
+    callback network-password-backspace();
+    callback network-password-submit();
+    callback network-back-pressed();
+    callback network-retry-pressed();
+    in property <NetMode> net-mode;
+    in property <[string]> net-devices;
+    in property <int> net-device-selected;
+    in property <[string]> net-networks;
+    in property <int> net-network-selected;
+    in property <string> net-ssid;
+    in property <string> net-password-display;
+    in property <string> net-status-text;
+
     if current-page == Page.Welcome : WelcomePage {
         continue-pressed => {
             current-page = Page.Keymap;
@@ -38,7 +57,29 @@ export component AppWindow inherits Window {
         selected: keymap-selected;
         apply-error: keymap-apply-error;
         selection-changed(i) => { keymap-selection-changed(i); }
-        continue-pressed => { keymap-confirmed(); }
+        continue-pressed => {
+            keymap-confirmed();
+            current-page = Page.Network;
+            network-entered();
+        }
         back-pressed => { current-page = Page.Welcome; }
+    }
+
+    if current-page == Page.Network : NetworkPage {
+        mode: net-mode;
+        devices: net-devices;
+        device-selected: net-device-selected;
+        networks: net-networks;
+        network-selected: net-network-selected;
+        ssid: net-ssid;
+        password-display: net-password-display;
+        status-text: net-status-text;
+        device-chosen(i) => { network-device-chosen(i); }
+        ssid-chosen(i) => { network-ssid-chosen(i); }
+        password-char(c) => { network-password-char(c); }
+        password-backspace => { network-password-backspace(); }
+        password-submit => { network-password-submit(); }
+        back-pressed => { network-back-pressed(); }
+        retry-pressed => { network-retry-pressed(); }
     }
 }

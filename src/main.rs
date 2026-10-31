@@ -49,6 +49,64 @@ fn main() -> anyhow::Result<()> {
         }
     });
 
+    let net_state = screens::network::new_state();
+
+    let weak = app.as_weak();
+    let state = net_state.clone();
+    app.on_network_entered(move || {
+        let Some(app) = weak.upgrade() else { return };
+        screens::network::enter(&app, &state);
+    });
+
+    let weak = app.as_weak();
+    let state = net_state.clone();
+    app.on_network_device_chosen(move |i| {
+        let Some(app) = weak.upgrade() else { return };
+        screens::network::device_chosen(&app, &state, i);
+    });
+
+    let weak = app.as_weak();
+    let state = net_state.clone();
+    app.on_network_ssid_chosen(move |i| {
+        let Some(app) = weak.upgrade() else { return };
+        screens::network::ssid_chosen(&app, &state, i);
+    });
+
+    let weak = app.as_weak();
+    let state = net_state.clone();
+    app.on_network_password_char(move |c| {
+        let Some(app) = weak.upgrade() else { return };
+        screens::network::password_char(&app, &state, c.as_str());
+    });
+
+    let weak = app.as_weak();
+    let state = net_state.clone();
+    app.on_network_password_backspace(move || {
+        let Some(app) = weak.upgrade() else { return };
+        screens::network::password_backspace(&app, &state);
+    });
+
+    let weak = app.as_weak();
+    let state = net_state.clone();
+    app.on_network_password_submit(move || {
+        let Some(app) = weak.upgrade() else { return };
+        screens::network::password_submit(&app, &state);
+    });
+
+    let weak = app.as_weak();
+    let state = net_state.clone();
+    app.on_network_back_pressed(move || {
+        let Some(app) = weak.upgrade() else { return };
+        screens::network::back_to_devices(&app, &state);
+    });
+
+    let weak = app.as_weak();
+    let state = net_state.clone();
+    app.on_network_retry_pressed(move || {
+        let Some(app) = weak.upgrade() else { return };
+        screens::network::back_to_devices(&app, &state);
+    });
+
     app.run()?;
     Ok(())
 }
@@ -67,7 +125,7 @@ fn apply_keymap_selection(app: &AppWindow, entries: Vec<String>, selected: usize
     app.set_keymap_apply_error(error.into());
 }
 
-fn to_model(entries: &[String]) -> ModelRc<SharedString> {
+pub(crate) fn to_model(entries: &[String]) -> ModelRc<SharedString> {
     let items: Vec<SharedString> = entries.iter().map(SharedString::from).collect();
     ModelRc::new(VecModel::from(items))
 }

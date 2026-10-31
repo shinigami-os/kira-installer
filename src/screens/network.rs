@@ -1,19 +1,11 @@
-use std::sync::mpsc::{self, Receiver};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::{
-    Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Modifier, Style},
-    text::{Line, Span},
-    widgets::Paragraph,
-};
+use slint::{ComponentHandle, SharedString, Weak};
 
-use super::{Screen, Transition};
-use crate::config::InstallConfig;
 use crate::run_cmd;
-use crate::theme::{PRIMARY, SUBTEXT, TEXT};
+use crate::to_model;
+use crate::{AppWindow, NetMode};
 
 struct NetDevice {
     name: String,
@@ -26,9 +18,9 @@ struct WifiNetwork {
     signal: u8,
 }
 
-// a background op's result, drained in on_tick - every nmcli/ping/flux call in this screen
-// can block for real seconds (wifi scan, DHCP, a slow mirror), so none of them run on the
-// main thread, matching the install/progress.rs pattern later stages use for the same reason
+// a background op's result, delivered back onto the Slint event-loop thread via
+// Weak::upgrade_in_event_loop rather than the mpsc::channel + 100ms on_tick poll the ratatui
+// prototype used - Slint's own event loop does the waking now, nothing to poll
 type OpResult = Result<String, String>;
 
 enum Mode {
@@ -36,37 +28,30 @@ enum Mode {
     Scanning,
     SelectSsid { networks: Vec<WifiNetwork>, selected: usize },
     EnterPassword { ssid: String, input: String },
-    Connecting(String), // status line shown while waiting
+    Connecting(String),
     PingTest,
     SyncingRecipes,
     Done,
     Failed(String),
 }
 
-pub struct NetworkScreen {
+pub struct NetworkState {
     mode: Mode,
     iface: String,
-    pending: Option<Receiver<OpResult>>,
     ping_ok: Option<bool>,
 }
 
-impl Default for NetworkScreen {
-    fn default() -> Self {
-        Self {
-            mode: Mode::SelectDevice { devices: Vec::new(), selected: 0 },
-            iface: String::new(),
-            pending: None,
-            ping_ok: None,
-        }
-    }
-}
+// Arc<Mutex<_>>, not Rc<RefCell<_>> like InstallConfig in main.rs - this one genuinely
+// crosses the thread boundary (a background op's completion closure captures a clone of it),
+// and Rc/RefCell aren't Send
+pub type SharedNetworkState = Arc<Mutex<NetworkState>>;
 
-fn spawn<F: FnOnce() -> OpResult + Send + 'static>(f: F) -> Receiver<OpResult> {
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = tx.send(f());
-    });
-    rx
+pub fn new_state() -> SharedNetworkState {
+    Arc::new(Mutex::new(NetworkState {
+        mode: Mode::SelectDevice { devices: list_devices(), selected: 0 },
+        iface: String::new(),
+        ping_ok: None,
+    }))
 }
 
 fn list_devices() -> Vec<NetDevice> {
@@ -97,113 +82,24 @@ fn list_devices() -> Vec<NetDevice> {
         .collect()
 }
 
-impl NetworkScreen {
-    fn start_scan(&mut self) {
-        let iface = self.iface.clone();
-        self.pending = Some(spawn(move || {
-            run_cmd::run("nmcli", &["device", "wifi", "rescan", "ifname", &iface])
-                .map_err(|e| e.to_string())?;
-            std::thread::sleep(std::time::Duration::from_secs(2));
-            let out = std::process::Command::new("nmcli")
-                .args(["-t", "-f", "SSID,SIGNAL", "device", "wifi", "list", "ifname", &iface])
-                .output()
-                .map_err(|e| e.to_string())?;
-            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
-        }));
-        self.mode = Mode::Scanning;
-    }
-
-    fn start_connect_wifi(&mut self, ssid: String, password: String) {
-        let iface = self.iface.clone();
-        self.mode = Mode::Connecting(format!("connecting to {ssid}..."));
-        self.pending = Some(spawn(move || {
-            let args = ["device", "wifi", "connect", &ssid, "password", &password, "ifname", &iface];
-            run_cmd::run("nmcli", &args).map_err(|e| e.to_string())?;
-            Ok(String::new())
-        }));
-    }
-
-    fn start_connect_ethernet(&mut self) {
-        let iface = self.iface.clone();
-        self.mode = Mode::Connecting(format!("connecting {iface}..."));
-        self.pending = Some(spawn(move || {
-            run_cmd::run("nmcli", &["device", "connect", &iface]).map_err(|e| e.to_string())?;
-            Ok(String::new())
-        }));
-    }
-
-    fn start_ping(&mut self) {
-        self.pending = Some(spawn(|| {
-            // informational only - install.sh itself never blocks on this (`set +e` around
-            // it), a live ISO with flaky/no internet should still be usable up to this point.
-            // .status() inherits the child's stdio by default - ping's own real-time output
-            // was writing straight to the shared terminal, corrupting the TUI's own rendered
-            // frame (found by testing: ping's lines were scattered across the screen,
-            // interleaved with whatever ratatui had drawn). .output() captures instead.
-            let ok = std::process::Command::new("ping")
-                .args(["-c", "3", "8.8.8.8"])
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-            Ok(if ok { "ok".to_string() } else { "failed".to_string() })
-        }));
-        self.mode = Mode::PingTest;
-    }
-
-    fn start_recipe_sync(&mut self) {
-        // run directly on the live rootfs, no chroot - flux and /etc/flux/flux.conf are
-        // already present on the live image (confirmed during research), and this is the
-        // same sync packages_install() triggers later inside the chroot (via flux install,
-        // which syncs recipes+Alpine index on demand) for the real install; running it here
-        // too just means step 10's devkit picker has real recipe data to read before any disk
-        // write happens. 'flux check' (not 'flux update' - that command doesn't exist anymore,
-        // renamed earlier in the same work this installer is part of) is the read-only sync.
-        self.pending = Some(spawn(|| run_cmd::run("flux", &["check"]).map_err(|e| e.to_string()).map(|_| String::new())));
-        self.mode = Mode::SyncingRecipes;
-    }
+fn spawn_op(weak: Weak<AppWindow>, state: SharedNetworkState, f: impl FnOnce() -> OpResult + Send + 'static) {
+    thread::spawn(move || {
+        let result = f();
+        let _ = weak.upgrade_in_event_loop(move |app| {
+            apply_result(&app, &state, result);
+        });
+    });
 }
 
-impl Screen for NetworkScreen {
-    fn on_enter(&mut self, _cfg: &mut InstallConfig) {
-        self.mode = Mode::SelectDevice { devices: list_devices(), selected: 0 };
+fn apply_result(app: &AppWindow, state: &SharedNetworkState, result: OpResult) {
+    enum NextAction {
+        Ping,
+        SyncRecipes,
     }
 
-    fn draw(&mut self, frame: &mut Frame, _cfg: &InstallConfig, _picker: &ratatui_image::picker::Picker) {
-        let area = frame.area();
-        let rows = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Fill(1),
-                Constraint::Length(1), // heading
-                Constraint::Length(1), // blank
-                Constraint::Min(1),    // body
-                Constraint::Length(1), // blank
-                Constraint::Length(1), // footer
-                Constraint::Fill(1),
-            ])
-            .split(area);
-
-        let heading = Paragraph::new(Span::styled(
-            "Network",
-            Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD),
-        ))
-        .alignment(Alignment::Center);
-        frame.render_widget(heading, rows[1]);
-
-        let (body, footer) = self.render_body();
-        frame.render_widget(Paragraph::new(body).alignment(Alignment::Center), rows[3]);
-        frame.render_widget(
-            Paragraph::new(Span::styled(footer, Style::default().fg(SUBTEXT))).alignment(Alignment::Center),
-            rows[5],
-        );
-    }
-
-    fn on_tick(&mut self, _cfg: &mut InstallConfig) -> Transition {
-        let Some(rx) = &self.pending else { return Transition::Stay };
-        let Ok(result) = rx.try_recv() else { return Transition::Stay };
-        self.pending = None;
-
-        match (&self.mode, result) {
+    let next_action = {
+        let mut s = state.lock().unwrap();
+        match (&s.mode, result) {
             (Mode::Scanning, Ok(raw)) => {
                 let mut networks: Vec<WifiNetwork> = raw
                     .lines()
@@ -219,175 +115,272 @@ impl Screen for NetworkScreen {
                     .collect();
                 networks.sort_by(|a, b| b.signal.cmp(&a.signal));
                 networks.dedup_by(|a, b| a.ssid == b.ssid);
-                self.mode = Mode::SelectSsid { networks, selected: 0 };
+                s.mode = Mode::SelectSsid { networks, selected: 0 };
+                None
             }
-            (Mode::Scanning, Err(e)) => self.mode = Mode::Failed(e),
-            (Mode::Connecting(_), Ok(_)) => self.start_ping(),
-            (Mode::Connecting(_), Err(e)) => self.mode = Mode::Failed(e),
+            (Mode::Scanning, Err(e)) => {
+                s.mode = Mode::Failed(e);
+                None
+            }
+            (Mode::Connecting(_), Ok(_)) => Some(NextAction::Ping),
+            (Mode::Connecting(_), Err(e)) => {
+                s.mode = Mode::Failed(e);
+                None
+            }
             (Mode::PingTest, Ok(status)) => {
-                self.ping_ok = Some(status == "ok");
-                self.start_recipe_sync();
+                s.ping_ok = Some(status == "ok");
+                Some(NextAction::SyncRecipes)
             }
-            (Mode::SyncingRecipes, Ok(_)) => self.mode = Mode::Done,
-            (Mode::SyncingRecipes, Err(e)) => self.mode = Mode::Failed(format!("recipe sync failed: {e}")),
-            _ => {}
+            (Mode::SyncingRecipes, Ok(_)) => {
+                s.mode = Mode::Done;
+                None
+            }
+            (Mode::SyncingRecipes, Err(e)) => {
+                s.mode = Mode::Failed(format!("recipe sync failed: {e}"));
+                None
+            }
+            _ => None,
         }
-        Transition::Stay
-    }
+    };
 
-    fn on_key(&mut self, key: KeyEvent, _cfg: &mut InstallConfig) -> Transition {
-        match &mut self.mode {
-            Mode::SelectDevice { devices, selected } => match key.code {
-                KeyCode::Up | KeyCode::Char('k') if *selected > 0 => {
-                    *selected -= 1;
-                    Transition::Stay
-                }
-                KeyCode::Down | KeyCode::Char('j') if *selected + 1 < devices.len() => {
-                    *selected += 1;
-                    Transition::Stay
-                }
-                KeyCode::Enter => {
-                    let Some(dev) = devices.get(*selected) else { return Transition::Stay };
-                    self.iface = dev.name.clone();
-                    if dev.is_wifi {
-                        if dev.connected {
-                            self.start_ping();
-                        } else {
-                            self.start_scan();
-                        }
-                    } else {
-                        self.start_connect_ethernet();
-                    }
-                    Transition::Stay
-                }
-                _ => Transition::Stay,
-            },
-            Mode::SelectSsid { networks, selected } => match key.code {
-                KeyCode::Up | KeyCode::Char('k') if *selected > 0 => {
-                    *selected -= 1;
-                    Transition::Stay
-                }
-                KeyCode::Down | KeyCode::Char('j') if *selected + 1 < networks.len() => {
-                    *selected += 1;
-                    Transition::Stay
-                }
-                KeyCode::Enter => {
-                    if let Some(net) = networks.get(*selected) {
-                        self.mode = Mode::EnterPassword { ssid: net.ssid.clone(), input: String::new() };
-                    }
-                    Transition::Stay
-                }
-                KeyCode::Esc => {
-                    self.mode = Mode::SelectDevice { devices: list_devices(), selected: 0 };
-                    Transition::Stay
-                }
-                _ => Transition::Stay,
-            },
-            Mode::EnterPassword { ssid, input } => match key.code {
-                KeyCode::Char(c) => {
-                    input.push(c);
-                    Transition::Stay
-                }
-                KeyCode::Backspace => {
-                    input.pop();
-                    Transition::Stay
-                }
-                KeyCode::Enter => {
-                    let (ssid, password) = (ssid.clone(), input.clone());
-                    self.start_connect_wifi(ssid, password);
-                    Transition::Stay
-                }
-                KeyCode::Esc => {
-                    self.mode = Mode::SelectDevice { devices: list_devices(), selected: 0 };
-                    Transition::Stay
-                }
-                _ => Transition::Stay,
-            },
-            Mode::Done => match key.code {
-                KeyCode::Enter => Transition::Next,
-                _ => Transition::Stay,
-            },
-            Mode::Failed(_) => match key.code {
-                // retry from the top rather than getting stuck - a flaky mirror/AP shouldn't
-                // need the whole installer restarted
-                KeyCode::Enter => {
-                    self.mode = Mode::SelectDevice { devices: list_devices(), selected: 0 };
-                    Transition::Stay
-                }
-                _ => Transition::Stay,
-            },
-            Mode::Scanning | Mode::Connecting(_) | Mode::PingTest | Mode::SyncingRecipes => Transition::Stay,
+    match next_action {
+        Some(NextAction::Ping) => start_ping(app, state),
+        Some(NextAction::SyncRecipes) => start_recipe_sync(app, state),
+        None => render(app, state),
+    }
+}
+
+fn start_scan(app: &AppWindow, state: &SharedNetworkState) {
+    let iface = {
+        let mut s = state.lock().unwrap();
+        s.mode = Mode::Scanning;
+        s.iface.clone()
+    };
+    render(app, state);
+    spawn_op(app.as_weak(), state.clone(), move || {
+        run_cmd::run("nmcli", &["device", "wifi", "rescan", "ifname", &iface]).map_err(|e| e.to_string())?;
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let out = std::process::Command::new("nmcli")
+            .args(["-t", "-f", "SSID,SIGNAL", "device", "wifi", "list", "ifname", &iface])
+            .output()
+            .map_err(|e| e.to_string())?;
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    });
+}
+
+fn start_connect_wifi(app: &AppWindow, state: &SharedNetworkState, ssid: String, password: String) {
+    let iface = {
+        let mut s = state.lock().unwrap();
+        s.mode = Mode::Connecting(format!("connecting to {ssid}..."));
+        s.iface.clone()
+    };
+    render(app, state);
+    spawn_op(app.as_weak(), state.clone(), move || {
+        let args = ["device", "wifi", "connect", &ssid, "password", &password, "ifname", &iface];
+        run_cmd::run("nmcli", &args).map_err(|e| e.to_string())?;
+        Ok(String::new())
+    });
+}
+
+fn start_connect_ethernet(app: &AppWindow, state: &SharedNetworkState) {
+    let iface = {
+        let mut s = state.lock().unwrap();
+        let status = format!("connecting {}...", s.iface);
+        s.mode = Mode::Connecting(status);
+        s.iface.clone()
+    };
+    render(app, state);
+    spawn_op(app.as_weak(), state.clone(), move || {
+        run_cmd::run("nmcli", &["device", "connect", &iface]).map_err(|e| e.to_string())?;
+        Ok(String::new())
+    });
+}
+
+fn start_ping(app: &AppWindow, state: &SharedNetworkState) {
+    {
+        state.lock().unwrap().mode = Mode::PingTest;
+    }
+    render(app, state);
+    spawn_op(app.as_weak(), state.clone(), || {
+        // informational only - install.sh itself never blocks on this, a live ISO with
+        // flaky/no internet should still be usable up to this point. .output() (not
+        // .status()) captures ping's real-time output instead of letting it inherit the
+        // shared terminal - a holdover fix from the ratatui prototype that's simply correct
+        // command-piping hygiene even though a GUI has no shared-frame corruption risk to
+        // avoid in the first place
+        let ok = std::process::Command::new("ping")
+            .args(["-c", "3", "8.8.8.8"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        Ok(if ok { "ok".to_string() } else { "failed".to_string() })
+    });
+}
+
+fn start_recipe_sync(app: &AppWindow, state: &SharedNetworkState) {
+    {
+        state.lock().unwrap().mode = Mode::SyncingRecipes;
+    }
+    render(app, state);
+    spawn_op(app.as_weak(), state.clone(), || {
+        run_cmd::run("flux", &["check"]).map_err(|e| e.to_string()).map(|_| String::new())
+    });
+}
+
+fn render(app: &AppWindow, state: &SharedNetworkState) {
+    let s = state.lock().unwrap();
+    match &s.mode {
+        Mode::SelectDevice { devices, selected } => {
+            app.set_net_mode(NetMode::SelectDevice);
+            let labels: Vec<String> = devices
+                .iter()
+                .map(|d| format!("{}{}", d.name, if d.connected { " (connected)" } else { "" }))
+                .collect();
+            app.set_net_devices(to_model(&labels));
+            app.set_net_device_selected(*selected as i32);
+        }
+        Mode::Scanning => {
+            app.set_net_mode(NetMode::Scanning);
+        }
+        Mode::SelectSsid { networks, selected } => {
+            app.set_net_mode(NetMode::SelectSsid);
+            let labels: Vec<String> = networks.iter().map(|n| format!("{} ({}%)", n.ssid, n.signal)).collect();
+            app.set_net_networks(to_model(&labels));
+            app.set_net_network_selected(*selected as i32);
+        }
+        Mode::EnterPassword { ssid, input } => {
+            app.set_net_mode(NetMode::EnterPassword);
+            app.set_net_ssid(SharedString::from(ssid.as_str()));
+            app.set_net_password_display(SharedString::from("*".repeat(input.chars().count())));
+        }
+        Mode::Connecting(status) => {
+            app.set_net_mode(NetMode::Connecting);
+            app.set_net_status_text(SharedString::from(status.as_str()));
+        }
+        Mode::PingTest => {
+            app.set_net_mode(NetMode::PingTest);
+            app.set_net_status_text(SharedString::from("checking connectivity..."));
+        }
+        Mode::SyncingRecipes => {
+            app.set_net_mode(NetMode::SyncingRecipes);
+            app.set_net_status_text(SharedString::from("syncing recipe repository..."));
+        }
+        Mode::Done => {
+            app.set_net_mode(NetMode::Done);
+            let line = match s.ping_ok {
+                Some(false) => "connected (internet check failed, continuing anyway)",
+                _ => "connected",
+            };
+            app.set_net_status_text(SharedString::from(line));
+        }
+        Mode::Failed(e) => {
+            app.set_net_mode(NetMode::Failed);
+            app.set_net_status_text(SharedString::from(e.as_str()));
         }
     }
 }
 
-impl NetworkScreen {
-    fn render_body(&self) -> (Vec<Line<'_>>, &'static str) {
-        match &self.mode {
-            Mode::SelectDevice { devices, selected } => {
-                if devices.is_empty() {
-                    return (vec![Line::from("no network devices found")], "");
-                }
-                let lines = devices
-                    .iter()
-                    .enumerate()
-                    .map(|(i, d)| {
-                        let marker = if d.connected { " (connected)" } else { "" };
-                        let label = format!("{}{}{}", if i == *selected { "> " } else { "  " }, d.name, marker);
-                        let style = if i == *selected {
-                            Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default().fg(TEXT)
-                        };
-                        Line::from(Span::styled(label, style))
-                    })
-                    .collect();
-                (lines, "Up/Down to select  -  Enter to continue")
-            }
-            Mode::Scanning => (vec![Line::from("scanning for wifi networks...")], ""),
-            Mode::SelectSsid { networks, selected } => {
-                if networks.is_empty() {
-                    return (vec![Line::from("no wifi networks found")], "Esc to go back");
-                }
-                let lines = networks
-                    .iter()
-                    .enumerate()
-                    .map(|(i, n)| {
-                        let label = format!(
-                            "{}{} ({}%)",
-                            if i == *selected { "> " } else { "  " },
-                            n.ssid,
-                            n.signal
-                        );
-                        let style = if i == *selected {
-                            Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default().fg(TEXT)
-                        };
-                        Line::from(Span::styled(label, style))
-                    })
-                    .collect();
-                (lines, "Up/Down to select  -  Enter to connect  -  Esc to go back")
-            }
-            Mode::EnterPassword { ssid, input } => (
-                vec![
-                    Line::from(format!("Password for {ssid}:")),
-                    Line::from("*".repeat(input.len())),
-                ],
-                "Enter to connect  -  Esc to go back",
-            ),
-            Mode::Connecting(status) => (vec![Line::from(status.as_str())], ""),
-            Mode::PingTest => (vec![Line::from("checking connectivity...")], ""),
-            Mode::SyncingRecipes => (vec![Line::from("syncing recipe repository...")], ""),
-            Mode::Done => {
-                let ping_line = match self.ping_ok {
-                    Some(true) => "connected",
-                    Some(false) => "connected (internet check failed, continuing anyway)",
-                    None => "connected",
-                };
-                (vec![Line::from(ping_line)], "Enter to continue")
-            }
-            Mode::Failed(e) => (vec![Line::from(e.as_str())], "Enter to try again"),
+// entry points called directly from main.rs's callback closures, which already run on the
+// event-loop thread and already hold a live &AppWindow - only the background ops above need
+// the Weak + upgrade_in_event_loop dance
+
+pub fn enter(app: &AppWindow, state: &SharedNetworkState) {
+    {
+        state.lock().unwrap().mode = Mode::SelectDevice { devices: list_devices(), selected: 0 };
+    }
+    render(app, state);
+}
+
+pub fn device_chosen(app: &AppWindow, state: &SharedNetworkState, index: i32) {
+    enum Action {
+        Scan,
+        Ping,
+        ConnectEthernet,
+    }
+
+    let action = {
+        let mut s = state.lock().unwrap();
+        let Mode::SelectDevice { devices, selected } = &mut s.mode else { return };
+        if index < 0 {
+            let Some(dev) = devices.get(*selected) else { return };
+            let action = if dev.is_wifi {
+                if dev.connected { Action::Ping } else { Action::Scan }
+            } else {
+                Action::ConnectEthernet
+            };
+            s.iface = dev.name.clone();
+            Some(action)
+        } else {
+            *selected = index as usize;
+            None
         }
+    };
+
+    match action {
+        Some(Action::Scan) => start_scan(app, state),
+        Some(Action::Ping) => start_ping(app, state),
+        Some(Action::ConnectEthernet) => start_connect_ethernet(app, state),
+        None => render(app, state),
     }
 }
+
+pub fn ssid_chosen(app: &AppWindow, state: &SharedNetworkState, index: i32) {
+    let confirmed_ssid = {
+        let mut s = state.lock().unwrap();
+        let Mode::SelectSsid { networks, selected } = &mut s.mode else { return };
+        if index < 0 {
+            networks.get(*selected).map(|n| n.ssid.clone())
+        } else {
+            *selected = index as usize;
+            None
+        }
+    };
+
+    if let Some(ssid) = confirmed_ssid {
+        state.lock().unwrap().mode = Mode::EnterPassword { ssid, input: String::new() };
+    }
+    render(app, state);
+}
+
+pub fn password_char(app: &AppWindow, state: &SharedNetworkState, ch: &str) {
+    {
+        let mut s = state.lock().unwrap();
+        if let Mode::EnterPassword { input, .. } = &mut s.mode {
+            input.push_str(ch);
+        }
+    }
+    render(app, state);
+}
+
+pub fn password_backspace(app: &AppWindow, state: &SharedNetworkState) {
+    {
+        let mut s = state.lock().unwrap();
+        if let Mode::EnterPassword { input, .. } = &mut s.mode {
+            input.pop();
+        }
+    }
+    render(app, state);
+}
+
+pub fn password_submit(app: &AppWindow, state: &SharedNetworkState) {
+    let creds = {
+        let s = state.lock().unwrap();
+        match &s.mode {
+            Mode::EnterPassword { ssid, input } => Some((ssid.clone(), input.clone())),
+            _ => None,
+        }
+    };
+    if let Some((ssid, password)) = creds {
+        start_connect_wifi(app, state, ssid, password);
+    }
+}
+
+// Esc from SelectSsid/EnterPassword, and retry from Failed, both land back on a freshly
+// re-scanned device list - matches the old on_key handlers for both cases exactly
+pub fn back_to_devices(app: &AppWindow, state: &SharedNetworkState) {
+    {
+        state.lock().unwrap().mode = Mode::SelectDevice { devices: list_devices(), selected: 0 };
+    }
+    render(app, state);
+}
+

@@ -1,0 +1,211 @@
+import { Palette } from "../palette.slint";
+
+export enum NetMode {
+    SelectDevice, Scanning, SelectSsid, EnterPassword, Connecting, PingTest, SyncingRecipes, Done, Failed
+}
+
+export component NetworkPage inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Palette.base;
+
+    in property <NetMode> mode: NetMode.SelectDevice;
+    in property <[string]> devices;
+    in property <int> device-selected;
+    in property <[string]> networks;
+    in property <int> network-selected;
+    in property <string> ssid;
+    // already-masked for display ("***...") - Rust owns the real password text, this page
+    // never sees it in the clear
+    in property <string> password-display;
+    in property <string> status-text;
+
+    // negative index means "confirm the current selection", matching how Enter behaved on
+    // the old ratatui SelectDevice/SelectSsid key handlers (confirm vs. just moving highlight)
+    callback device-chosen(int);
+    callback ssid-chosen(int);
+    callback password-char(string);
+    callback password-backspace();
+    callback password-submit();
+    callback back-pressed();
+    callback retry-pressed();
+    callback continue-pressed();
+
+    init => { key-handler.focus(); }
+
+    key-handler := FocusScope {
+        key-pressed(event) => {
+            if (mode == NetMode.SelectDevice) {
+                if ((event.text == Key.UpArrow || event.text == "k") && device-selected > 0) {
+                    device-chosen(device-selected - 1);
+                    return accept;
+                }
+                if ((event.text == Key.DownArrow || event.text == "j") && device-selected + 1 < devices.length) {
+                    device-chosen(device-selected + 1);
+                    return accept;
+                }
+                if (event.text == Key.Return) {
+                    device-chosen(-1);
+                    return accept;
+                }
+                return reject;
+            }
+            if (mode == NetMode.SelectSsid) {
+                if ((event.text == Key.UpArrow || event.text == "k") && network-selected > 0) {
+                    ssid-chosen(network-selected - 1);
+                    return accept;
+                }
+                if ((event.text == Key.DownArrow || event.text == "j") && network-selected + 1 < networks.length) {
+                    ssid-chosen(network-selected + 1);
+                    return accept;
+                }
+                if (event.text == Key.Return) {
+                    ssid-chosen(-1);
+                    return accept;
+                }
+                if (event.text == Key.Escape) {
+                    back-pressed();
+                    return accept;
+                }
+                return reject;
+            }
+            if (mode == NetMode.EnterPassword) {
+                if (event.text == Key.Return) {
+                    password-submit();
+                    return accept;
+                }
+                if (event.text == Key.Escape) {
+                    back-pressed();
+                    return accept;
+                }
+                if (event.text == Key.Backspace) {
+                    password-backspace();
+                    return accept;
+                }
+                // anything else typed is treated as literal password input - mirrors the old
+                // crossterm KeyCode::Char(c) arm; unlike crossterm, Slint doesn't give us a
+                // clean type-level way to exclude every possible non-printable key here, so a
+                // stray special key could in principle leak a character into the password.
+                // Accepted as a minor, unlikely-to-matter rough edge rather than engineering a
+                // full key classifier for this one field.
+                password-char(event.text);
+                return accept;
+            }
+            if (mode == NetMode.Done) {
+                if (event.text == Key.Return) {
+                    continue-pressed();
+                    return accept;
+                }
+                return reject;
+            }
+            if (mode == NetMode.Failed) {
+                if (event.text == Key.Return) {
+                    retry-pressed();
+                    return accept;
+                }
+                return reject;
+            }
+            reject
+        }
+    }
+
+    VerticalLayout {
+        width: 100%;
+        height: 100%;
+        alignment: center;
+        spacing: 24px;
+
+        Text {
+            text: "Network";
+            color: Palette.primary;
+            font-size: 28px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        if mode == NetMode.SelectDevice : VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            for name[i] in devices : Text {
+                text: (i == device-selected ? "> " : "  ") + name;
+                color: i == device-selected ? Palette.primary : Palette.text;
+                font-weight: i == device-selected ? 700 : 400;
+                horizontal-alignment: center;
+            }
+            if devices.length == 0 : Text {
+                text: "no network devices found";
+                color: Palette.subtext;
+                horizontal-alignment: center;
+            }
+        }
+
+        if mode == NetMode.Scanning : Text {
+            text: "scanning for wifi networks...";
+            color: Palette.text;
+            horizontal-alignment: center;
+        }
+
+        if mode == NetMode.SelectSsid : VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            for name[i] in networks : Text {
+                text: (i == network-selected ? "> " : "  ") + name;
+                color: i == network-selected ? Palette.primary : Palette.text;
+                font-weight: i == network-selected ? 700 : 400;
+                horizontal-alignment: center;
+            }
+            if networks.length == 0 : Text {
+                text: "no wifi networks found  -  Esc to go back";
+                color: Palette.subtext;
+                horizontal-alignment: center;
+            }
+        }
+
+        if mode == NetMode.EnterPassword : VerticalLayout {
+            alignment: center;
+            spacing: 8px;
+            Text {
+                text: "Password for " + ssid + ":";
+                color: Palette.text;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: password-display;
+                color: Palette.text;
+                horizontal-alignment: center;
+            }
+        }
+
+        if mode == NetMode.Connecting || mode == NetMode.PingTest || mode == NetMode.SyncingRecipes : Text {
+            text: status-text;
+            color: Palette.text;
+            horizontal-alignment: center;
+        }
+
+        if mode == NetMode.Done : Text {
+            text: status-text;
+            color: Palette.text;
+            horizontal-alignment: center;
+        }
+
+        if mode == NetMode.Failed : Text {
+            text: status-text;
+            color: Palette.secondary;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: {
+                if (mode == NetMode.SelectDevice) { "Up/Down to select  -  Enter to continue" }
+                else if (mode == NetMode.SelectSsid) { "Up/Down to select  -  Enter to connect  -  Esc to go back" }
+                else if (mode == NetMode.EnterPassword) { "Enter to connect  -  Esc to go back" }
+                else if (mode == NetMode.Done) { "Enter to continue" }
+                else if (mode == NetMode.Failed) { "Enter to try again" }
+                else { "" }
+            };
+            color: Palette.subtext;
+            font-size: 14px;
+            horizontal-alignment: center;
+        }
+    }
+}

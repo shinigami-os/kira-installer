@@ -1,2 +1,6 @@
 build/
 releases/
+
+# Added by cargo
+
+/target

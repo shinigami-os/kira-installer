@@ -1,0 +1,48 @@
+#!/bin/sh
+# Launches kira-installer inside cage+foot for a crisp (Sixel) image render, falling back to
+# running it directly on the bare console if cage can't get a DRM device - a real possibility
+# on install media specifically, which has to support far more unknown hardware than an
+# already-confirmed-working installed system (kira-start-sleex) ever has to worry about.
+
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+if ! mkdir -p "$XDG_RUNTIME_DIR" || ! chmod 700 "$XDG_RUNTIME_DIR"; then
+    echo "kira-start-installer: failed to set up XDG_RUNTIME_DIR, falling back to bare console" >&2
+    exec kira-installer
+fi
+
+# without this, foot/libxkbcommon defaults to a plain US layout no matter what's actually
+# active on the console - found by testing on a physical AZERTY keyboard, where the key
+# labeled Q (quit) actually produced 'a'. Same keymap_file -> XKB_DEFAULT_LAYOUT/VARIANT
+# pattern kira-greetd's own start-greeter.sh already uses for the same reason.
+keymap_file=$(ls /etc/keymaps/*.bmap 2>/dev/null | head -n1)
+if [ -n "$keymap_file" ]; then
+    keymap_name=$(basename "$keymap_file" .bmap)
+    export XKB_DEFAULT_LAYOUT="${keymap_name%%-*}"
+    variant="${keymap_name#*-}"
+    [ "$variant" != "$keymap_name" ] && export XKB_DEFAULT_VARIANT="$variant"
+fi
+
+# seatd grants cage its DRM/input device access - same wait pattern kira-greetd's own
+# start-greeter.sh already uses
+i=0
+while [ ! -S /run/seatd.sock ] && [ $i -lt 15 ]; do
+    sleep 1
+    i=$((i + 1))
+done
+
+# cage logs its own (often long) wlroots/DRM/EGL startup debug output to stderr - kept, not
+# discarded, but out of the way in a fixed, predictable spot instead of scrolling the console
+# root has no foot.ini (that's a per-user config under kira-desktop's dotfiles, which the
+# live/install environment never seeds for root) - override straight to Kira's own palette
+# (kira-desktop/swayfx/foot/foot.ini: background=0a0a0f) instead of foot's stock default, and
+# drop the terminal padding entirely since this is a kiosk display, not a windowed terminal
+if cage -- foot -o colors.background=0a0a0f -o pad=0x0 -e kira-installer 2>/tmp/kira-start-installer-cage.log; then
+    # cage exits 0 once its client (foot, and kira-installer inside it) exits normally - that's
+    # the installer finishing or the user quitting it, not a cage failure, so just finish here
+    exit 0
+fi
+
+# cage itself failed (most likely: no DRM/KMS device at all) - fall back to the bare console
+# path, which kira-installer already renders correctly on (see src/term_picker.rs)
+echo "kira-start-installer: cage failed, falling back to bare console" >&2
+exec kira-installer

@@ -1,0 +1,18 @@
+[package]
+name = "kira-installer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+libc = "0.2.191"
+ratatui = "0.30.2"
+crossterm = "0.29"
+# DE-preview screenshots (step 8). default-features off to drop chafa-dyn - that needs
+# libchafa (a C library) at runtime via pkg-config, which the live ISO has no reason to carry
+# just for image rendering. "crossterm" picks the matching backend-detection glue, "image-defaults"
+# keeps the image crate's own default decoders (PNG/JPEG). Halfblocks (plain Unicode + truecolor)
+# is the fallback used whenever no graphics protocol is detected - the only mode that works on
+# the live ISO's bare VT console, which has no terminal emulator to negotiate Kitty/Sixel/iTerm2 with.
+ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm", "image-defaults"] }
+image = "0.25"

@@ -8,9 +8,9 @@ use crate::config::InstallConfig;
 use crate::screens::{self, Screen, ScreenId, Transition};
 use crate::theme;
 
-// Temporary: stage 1 only has one screen. Each later build stage (see the implementation
-// plan) appends to this list as its screens land - this is not the final flow order.
-const SCREEN_ORDER: &[ScreenId] = &[ScreenId::Welcome];
+// Temporary: grows as each build stage's screens land (see the implementation plan) - this
+// is not the final flow order until every step 1-13 is represented.
+const SCREEN_ORDER: &[ScreenId] = &[ScreenId::Welcome, ScreenId::Keymap];
 
 // TEMPORARY diagnostic: input appeared completely unresponsive under cage+foot during testing
 // (worked fine on the bare console) - this makes it directly checkable (cat the file) instead

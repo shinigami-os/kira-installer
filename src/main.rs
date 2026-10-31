@@ -1,5 +1,7 @@
 mod app;
 mod config;
+mod disk;
+mod run_cmd;
 mod screens;
 mod term_picker;
 mod theme;

@@ -4,11 +4,13 @@ use ratatui_image::picker::Picker;
 
 use crate::config::InstallConfig;
 
+pub mod keymap;
 pub mod welcome;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ScreenId {
     Welcome,
+    Keymap,
 }
 
 pub enum Transition {
@@ -37,5 +39,6 @@ pub trait Screen {
 pub fn build(id: ScreenId) -> Box<dyn Screen> {
     match id {
         ScreenId::Welcome => Box::new(welcome::WelcomeScreen::default()),
+        ScreenId::Keymap => Box::new(keymap::KeymapScreen::default()),
     }
 }

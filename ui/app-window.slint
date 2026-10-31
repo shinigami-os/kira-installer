@@ -1,17 +1,44 @@
 import { Palette } from "palette.slint";
 import { WelcomePage } from "pages/welcome.slint";
+import { KeymapPage } from "pages/keymap.slint";
+
+// grows as each build stage's pages land, same reasoning the old SCREEN_ORDER comment had -
+// not the final flow order until every step 1-13 is represented
+export enum Page { Welcome, Keymap }
 
 export component AppWindow inherits Window {
     title: "Kira Installer";
     background: Palette.base;
-    // deliberately no explicit width/height - the content still rendered centered-but-small
-    // in the corner of the real 1920x1080 panel with 1280x720 declared here (confirmed live
-    // on kira2 via two screenshots), meaning Slint was laying everything out correctly inside
-    // that smaller logical canvas and the LinuxKMS backend was NOT overriding it with the
-    // real display's size - leaving this unset lets it pick up the actual DRM mode instead
 
-    callback continue-pressed <=> welcome.continue-pressed;
-    callback quit-requested <=> welcome.quit-requested;
+    in-out property <Page> current-page: Page.Welcome;
 
-    welcome := WelcomePage {}
+    callback quit-requested();
+    // fired once when the user navigates onto the keymap page, so Rust can do the initial
+    // directory scan + first loadkmap apply - mirrors the old Screen::on_enter() hook
+    callback keymap-entered();
+    callback keymap-selection-changed(int);
+    // confirmed choice (Enter) vs. the live-apply-on-every-move above - matches the old
+    // Screen::on_key()'s distinction between loadkmap running on every highlight change and
+    // InstallConfig.keymap only being committed once the user actually confirms
+    callback keymap-confirmed();
+    in property <[string]> keymap-entries;
+    in property <int> keymap-selected;
+    in property <string> keymap-apply-error;
+
+    if current-page == Page.Welcome : WelcomePage {
+        continue-pressed => {
+            current-page = Page.Keymap;
+            keymap-entered();
+        }
+        quit-requested => { quit-requested(); }
+    }
+
+    if current-page == Page.Keymap : KeymapPage {
+        entries: keymap-entries;
+        selected: keymap-selected;
+        apply-error: keymap-apply-error;
+        selection-changed(i) => { keymap-selection-changed(i); }
+        continue-pressed => { keymap-confirmed(); }
+        back-pressed => { current-page = Page.Welcome; }
+    }
 }

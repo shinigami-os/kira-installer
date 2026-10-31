@@ -1,0 +1,84 @@
+import { Palette } from "../palette.slint";
+
+export component KeymapPage inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Palette.base;
+
+    in property <[string]> entries;
+    in property <int> selected;
+    in property <string> apply-error;
+
+    // fired with the new index on Up/Down - Rust re-applies loadkmap and reports the result
+    // back through the `selected`/`apply-error` properties, same round-trip the old ratatui
+    // on_key()/apply_selected() pair did directly in-process
+    callback selection-changed(int);
+    callback continue-pressed();
+    callback back-pressed();
+
+    init => { key-handler.focus(); }
+
+    key-handler := FocusScope {
+        key-pressed(event) => {
+            if ((event.text == Key.UpArrow || event.text == "k") && selected > 0) {
+                selection-changed(selected - 1);
+                return accept;
+            }
+            if ((event.text == Key.DownArrow || event.text == "j") && selected + 1 < entries.length) {
+                selection-changed(selected + 1);
+                return accept;
+            }
+            if (event.text == Key.Return) {
+                continue-pressed();
+                return accept;
+            }
+            if (event.text == Key.Escape) {
+                back-pressed();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    VerticalLayout {
+        width: 100%;
+        height: 100%;
+        alignment: center;
+        spacing: 24px;
+
+        Text {
+            text: "Keyboard Layout";
+            color: Palette.primary;
+            font-size: 28px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+
+            for name[i] in entries : Text {
+                text: (i == selected ? "> " : "  ") + name;
+                color: i == selected ? Palette.primary : Palette.text;
+                font-weight: i == selected ? 700 : 400;
+                font-size: 16px;
+                horizontal-alignment: center;
+            }
+        }
+
+        if apply-error != "" : Text {
+            text: apply-error;
+            color: Palette.secondary;
+            font-size: 14px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: "Up/Down to select  -  Enter to continue  -  Esc to go back";
+            color: Palette.subtext;
+            font-size: 14px;
+            horizontal-alignment: center;
+        }
+    }
+}

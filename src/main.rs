@@ -1,3 +1,13 @@
+mod config;
+mod disk;
+mod run_cmd;
+mod screens;
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use slint::{Model, ModelRc, SharedString, VecModel};
+
 slint::include_modules!();
 
 fn main() -> anyhow::Result<()> {
@@ -6,11 +16,64 @@ fn main() -> anyhow::Result<()> {
     }
 
     let app = AppWindow::new()?;
+    // shared across every screen's callbacks (single-threaded - Slint callbacks all run on
+    // the event-loop thread), accumulating choices up to the step-11 summary gate per the plan
+    let cfg = Rc::new(RefCell::new(config::InstallConfig::default()));
+
     app.on_quit_requested(|| {
         let _ = slint::quit_event_loop();
     });
+
+    let weak = app.as_weak();
+    app.on_keymap_entered(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let entries = screens::keymap::scan_entries();
+        let selected = screens::keymap::default_selected(&entries);
+        apply_keymap_selection(&app, entries, selected);
+    });
+
+    let weak = app.as_weak();
+    app.on_keymap_selection_changed(move |selected| {
+        let Some(app) = weak.upgrade() else { return };
+        let entries = model_to_vec(&app.get_keymap_entries());
+        apply_keymap_selection(&app, entries, selected as usize);
+    });
+
+    let weak = app.as_weak();
+    app.on_keymap_confirmed(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let entries = model_to_vec(&app.get_keymap_entries());
+        let selected = app.get_keymap_selected() as usize;
+        if let Some(name) = entries.get(selected) {
+            cfg.borrow_mut().keymap = name.clone();
+        }
+    });
+
     app.run()?;
     Ok(())
+}
+
+// shared by both the initial on-enter scan and every subsequent Up/Down move - loadkmap runs
+// synchronously right here on the event-loop thread, same as the ratatui prototype did; it's
+// fast enough (just a console keymap load) that a background thread isn't warranted, unlike
+// the slower network.rs operations stage 3 re-wires next
+fn apply_keymap_selection(app: &AppWindow, entries: Vec<String>, selected: usize) {
+    let error = entries
+        .get(selected)
+        .and_then(|name| screens::keymap::apply(name).err())
+        .unwrap_or_default();
+    app.set_keymap_entries(to_model(&entries));
+    app.set_keymap_selected(selected as i32);
+    app.set_keymap_apply_error(error.into());
+}
+
+fn to_model(entries: &[String]) -> ModelRc<SharedString> {
+    let items: Vec<SharedString> = entries.iter().map(SharedString::from).collect();
+    ModelRc::new(VecModel::from(items))
+}
+
+fn model_to_vec(model: &ModelRc<SharedString>) -> Vec<String> {
+    model.iter().map(|s| s.to_string()).collect()
 }
 
 fn is_root() -> bool {

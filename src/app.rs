@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyEventKind};
-use ratatui::DefaultTerminal;
+use ratatui::{DefaultTerminal, style::Style, widgets::Block};
 use ratatui_image::picker::Picker;
 
 use crate::config::InstallConfig;
 use crate::screens::{self, Screen, ScreenId, Transition};
+use crate::theme;
 
 // Temporary: stage 1 only has one screen. Each later build stage (see the implementation
 // plan) appends to this list as its screens land - this is not the final flow order.
@@ -50,7 +51,16 @@ impl App {
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
         loop {
-            terminal.draw(|frame| self.current.draw(frame, &self.cfg, &self.picker))?;
+            terminal.draw(|frame| {
+                // paint every cell explicitly before the screen draws anything on top -
+                // found by testing that foot's own `-o colors.background=...` override isn't
+                // reliably honored (or isn't what an unstyled cell actually falls back to) in
+                // this environment, so the terminal's own "default background" can't be
+                // trusted at all. This is the one thing guaranteed to work on both the bare
+                // console and under cage+foot, so no screen needs to think about it itself.
+                frame.render_widget(Block::default().style(Style::default().bg(theme::BASE)), frame.area());
+                self.current.draw(frame, &self.cfg, &self.picker);
+            })?;
 
             let transition = if event::poll(Duration::from_millis(100))? {
                 let ev = event::read()?;

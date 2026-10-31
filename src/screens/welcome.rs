@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect, Size},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::Span,
     widgets::Paragraph,
 };
@@ -10,12 +10,7 @@ use ratatui_image::{Image, Resize, picker::Picker, protocol::Protocol};
 
 use super::{Screen, Transition};
 use crate::config::InstallConfig;
-
-// Kira's own brand palette (kira-website design spec), true color since every terminal Kira
-// ships supports it.
-const PRIMARY: Color = Color::Rgb(170, 0, 255); // #aa00ff
-const TEXT: Color = Color::Rgb(232, 216, 255); // #e8d8ff
-const SUBTEXT: Color = Color::Rgb(176, 154, 204); // #b09acc
+use crate::theme::{PRIMARY, SUBTEXT, TEXT};
 
 // the real kira-linux.com logo (transparent background, light-lavender colorway meant for a
 // dark background - the other variant on the site, kira-logo.png proper, is black-on-light
@@ -68,6 +63,7 @@ impl WelcomeScreen {
         // source PNG) get composited against whatever background the chosen protocol assumes,
         // producing muddy off-palette fringing (tan/olive speckling) not in the source at all
         let (w, h) = (image.width(), image.height());
+        // matches theme::BASE - image::Rgba wants a plain u8 array, not a ratatui Color
         let mut background = image::RgbaImage::from_pixel(w, h, image::Rgba([10, 10, 15, 255]));
         image::imageops::overlay(&mut background, &image.to_rgba8(), 0, 0);
         let image = image::DynamicImage::ImageRgba8(background);

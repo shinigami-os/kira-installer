@@ -10,6 +10,15 @@ if ! mkdir -p "$XDG_RUNTIME_DIR" || ! chmod 700 "$XDG_RUNTIME_DIR"; then
     exec kira-installer
 fi
 
+# cage always renders *some* cursor sprite at startup regardless of any real pointer device
+# (confirmed: no config/flag suppresses this, and the no-pointer udev rule below only stops it
+# from moving) - a cursor theme whose images are all fully transparent means cage still
+# successfully loads a theme (no fallback path triggered), it just has nothing visible to draw.
+# Theme installed to the standard XCURSOR_PATH location by whatever eventually packages this
+# script (see the implementation plan's follow-up-work note) - assets/kira-transparent-cursor
+# in this repo is the source these files were generated from (xcursorgen).
+export XCURSOR_THEME=kira-transparent
+
 # without this, foot/libxkbcommon defaults to a plain US layout no matter what's actually
 # active on the console - found by testing on a physical AZERTY keyboard, where the key
 # labeled Q (quit) actually produced 'a'. Same keymap_file -> XKB_DEFAULT_LAYOUT/VARIANT
@@ -30,19 +39,46 @@ while [ ! -S /run/seatd.sock ] && [ $i -lt 15 ]; do
     i=$((i + 1))
 done
 
+# cage has no flag or env var to hide the mouse pointer at all - this is a long-standing,
+# still-open upstream limitation (cage-kiosk/cage#524), and the maintainers explicitly say
+# just hiding it client-side "is not a solution, because it results in a ghost cursor" (a
+# stale cursor sprite stuck on screen). The fix they point to: tell libinput to ignore every
+# pointer-class device via udev *before* cage ever starts, so it never draws a cursor to begin
+# with - there's nothing for a TUI installer to do with a mouse anyway. Scoped to this
+# installer run only: removed and devices re-triggered back to normal once cage exits.
+NOPOINTER_RULE=/etc/udev/rules.d/99-kira-installer-no-pointer.rules
+cat > "$NOPOINTER_RULE" << 'EOF'
+ACTION!="remove", SUBSYSTEM=="input", ENV{ID_INPUT_MOUSE}=="1", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+ACTION!="remove", SUBSYSTEM=="input", ENV{ID_INPUT_TOUCHPAD}=="1", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+EOF
+udevadm control --reload-rules
+udevadm trigger --subsystem-match=input
+
+restore_pointer() {
+    rm -f "$NOPOINTER_RULE"
+    udevadm control --reload-rules
+    udevadm trigger --subsystem-match=input
+}
+
 # cage logs its own (often long) wlroots/DRM/EGL startup debug output to stderr - kept, not
-# discarded, but out of the way in a fixed, predictable spot instead of scrolling the console
+# discarded, but out of the way in a fixed, predictable spot instead of scrolling the console.
 # root has no foot.ini (that's a per-user config under kira-desktop's dotfiles, which the
 # live/install environment never seeds for root) - override straight to Kira's own palette
-# (kira-desktop/swayfx/foot/foot.ini: background=0a0a0f) instead of foot's stock default, and
-# drop the terminal padding entirely since this is a kiosk display, not a windowed terminal
-if cage -- foot -o colors.background=0a0a0f -o pad=0x0 -e kira-installer 2>/tmp/kira-start-installer-cage.log; then
+# (kira-desktop/swayfx/foot/foot.ini: background=0a0a0f) instead of foot's stock default,
+# force full opacity in case foot's own default alpha isn't 1.0, and drop the terminal padding
+# since this is a kiosk display. -F/--fullscreen: cage doesn't force its one client to fill
+# the output on its own - without this foot opens at its own small default window size,
+# leaving the rest of the display showing whatever's behind it (found by testing: the content
+# itself was rendering correctly, in a box sized to fit it, surrounded by uncovered screen)
+if cage -- foot -F -o colors.background=0a0a0f -o colors.alpha=1.0 -o pad=0x0 -e kira-installer 2>/tmp/kira-start-installer-cage.log; then
     # cage exits 0 once its client (foot, and kira-installer inside it) exits normally - that's
     # the installer finishing or the user quitting it, not a cage failure, so just finish here
+    restore_pointer
     exit 0
 fi
 
 # cage itself failed (most likely: no DRM/KMS device at all) - fall back to the bare console
 # path, which kira-installer already renders correctly on (see src/term_picker.rs)
+restore_pointer
 echo "kira-start-installer: cage failed, falling back to bare console" >&2
 exec kira-installer

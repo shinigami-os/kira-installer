@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod screens;
 mod term_picker;
+mod theme;
 
 use app::App;
 

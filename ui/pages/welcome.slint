@@ -32,6 +32,12 @@ export component WelcomePage inherits Rectangle {
     }
 
     VerticalLayout {
+        // a layout element doesn't fill its parent by default either - without this it sizes
+        // to its own content (the logo + text block) and sits near the top-left corner of the
+        // real display instead of being centered on it, same root cause as the Rectangle fix
+        // above, found in the same live screenshot
+        width: 100%;
+        height: 100%;
         alignment: center;
         spacing: 24px;
 

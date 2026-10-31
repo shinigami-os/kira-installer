@@ -18,6 +18,16 @@ PACKAGES_SLEEX="kira-desktop-sleex netsurf git greetd"
 TARBALL="/installer/kira-base.tar.xz"
 KIRA_TIER=$(cat /etc/kira-tier 2>/dev/null || echo "server")
 
+# the live environment's blkid is BusyBox's applet, which silently ignores -s/-o -
+# "blkid -s UUID -o value $PART" was falling back to BusyBox's own default output
+# (the full "/dev/X: UUID=\"...\" TYPE=\"...\"" line, not just the UUID), writing
+# literal garbage like 'UUID=/dev/nvme0n1p2: UUID="..." TYPE="swap"' into fstab -
+# invalid syntax that silently never activated swap on boot. Parsing that same
+# default-format output by hand works on both BusyBox's blkid and util-linux's.
+blkid_uuid() {
+    blkid "$1" | sed -n 's/.*UUID="\([^"]*\)".*/\1/p'
+}
+
 check_root() {
     echo "Checking root..."
     if [ "$(id -u)" -ne 0 ]; then
@@ -366,11 +376,11 @@ fstab_entry() {
     echo "Creating fstab..."
     cat > "$MOUNT_POINT/etc/fstab" << EOF
 # Kira Linux fstab
-UUID=$(blkid -s UUID -o value $ROOT_PART)  /           ext4    defaults    0 1
-UUID=$(blkid -s UUID -o value $ESP_PART)   /boot/efi   vfat    defaults    0 2
+UUID=$(blkid_uuid "$ROOT_PART")  /           ext4    defaults    0 1
+UUID=$(blkid_uuid "$ESP_PART")   /boot/efi   vfat    defaults    0 2
 EOF
     if [ "$CONFIRM_SWAP" = "y" ]; then
-        echo "UUID=$(blkid -s UUID -o value $SWAP_PART)  none  swap  sw  0 0" >> "$MOUNT_POINT/etc/fstab"
+        echo "UUID=$(blkid_uuid "$SWAP_PART")  none  swap  sw  0 0" >> "$MOUNT_POINT/etc/fstab"
     fi
 }
 
@@ -488,7 +498,7 @@ packages_install() {
 # silently falls back to a raw /dev/nvmeXnYpZ path, which breaks on reboot if NVMe
 # enumeration order shifts - force it to the UUID fstab already uses successfully
 fix_grub_root_uuid() {
-    sed -i "s#root=$ROOT_PART#root=UUID=$(blkid -s UUID -o value $ROOT_PART)#" \
+    sed -i "s#root=$ROOT_PART#root=UUID=$(blkid_uuid "$ROOT_PART")#" \
         "$MOUNT_POINT/boot/grub/grub.cfg"
 }
 

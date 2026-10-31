@@ -1,6 +1,13 @@
 import { Palette } from "../palette.slint";
 
 export component WelcomePage inherits Rectangle {
+    // without an explicit size this Rectangle only grows to fit its own content (the logo +
+    // text) rather than filling the real display - found live on kira2: the LinuxKMS backend
+    // sizes the Window itself from the actual DRM mode (1920x1080 there) regardless of any
+    // width/height declared on the Window, but a plain child element doesn't inherit that
+    // size automatically, so it rendered small and pinned to a corner instead of centered.
+    width: 100%;
+    height: 100%;
     background: Palette.base;
 
     callback continue-pressed();

@@ -5,8 +5,9 @@ export component AppWindow inherits Window {
     title: "Kira Installer";
     background: Palette.base;
     // only matters when running under a desktop Slint backend for local dev (`cargo run`
-    // without the linuxkms feature) - the real LinuxKMS backend owns the whole display and
-    // ignores requested window geometry
+    // without the linuxkms feature) - confirmed live on kira2 that the LinuxKMS backend
+    // always sizes the window from the real DRM mode (1920x1080 there) regardless of this,
+    // so it's a pure no-op in the actual target environment
     width: 1280px;
     height: 720px;
 

@@ -1,0 +1,190 @@
+import { Palette } from "../palette.slint";
+
+export enum PartModeStage { SelectMethod, AssistedError, ConfirmSwap, EnterSwapSize }
+
+export component PartitionModePage inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Palette.base;
+
+    in property <PartModeStage> stage: PartModeStage.SelectMethod;
+    in property <int> method-selected;
+    in property <int> swap-selected;
+    in property <string> free-gib-text;
+    in property <string> swap-size-input;
+    in property <string> error-text;
+
+    callback method-chosen(int);
+    callback assisted-error-ack();
+    callback swap-chosen(int);
+    callback swap-size-char(string);
+    callback swap-size-backspace();
+    callback swap-size-submit();
+    callback back-pressed();
+
+    init => { key-handler.focus(); }
+
+    key-handler := FocusScope {
+        key-pressed(event) => {
+            if (stage == PartModeStage.SelectMethod) {
+                if ((event.text == Key.UpArrow || event.text == "k") && method-selected > 0) {
+                    method-chosen(method-selected - 1);
+                    return accept;
+                }
+                if ((event.text == Key.DownArrow || event.text == "j") && method-selected < 1) {
+                    method-chosen(method-selected + 1);
+                    return accept;
+                }
+                if (event.text == Key.Return) {
+                    method-chosen(-1);
+                    return accept;
+                }
+                if (event.text == Key.Escape) {
+                    back-pressed();
+                    return accept;
+                }
+                return reject;
+            }
+            if (stage == PartModeStage.AssistedError) {
+                if (event.text == Key.Return || event.text == Key.Escape) {
+                    assisted-error-ack();
+                    return accept;
+                }
+                return reject;
+            }
+            if (stage == PartModeStage.ConfirmSwap) {
+                if ((event.text == Key.UpArrow || event.text == "k") && swap-selected > 0) {
+                    swap-chosen(swap-selected - 1);
+                    return accept;
+                }
+                if ((event.text == Key.DownArrow || event.text == "j") && swap-selected < 1) {
+                    swap-chosen(swap-selected + 1);
+                    return accept;
+                }
+                if (event.text == Key.Return) {
+                    swap-chosen(-1);
+                    return accept;
+                }
+                if (event.text == Key.Escape) {
+                    back-pressed();
+                    return accept;
+                }
+                return reject;
+            }
+            if (stage == PartModeStage.EnterSwapSize) {
+                if (event.text == Key.Return) {
+                    swap-size-submit();
+                    return accept;
+                }
+                if (event.text == Key.Escape) {
+                    back-pressed();
+                    return accept;
+                }
+                if (event.text == Key.Backspace) {
+                    swap-size-backspace();
+                    return accept;
+                }
+                swap-size-char(event.text);
+                return accept;
+            }
+            reject
+        }
+    }
+
+    VerticalLayout {
+        width: 100%;
+        height: 100%;
+        alignment: center;
+        spacing: 24px;
+
+        Text {
+            text: "Partitioning";
+            color: Palette.primary;
+            font-size: 28px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        if stage == PartModeStage.SelectMethod : VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: (method-selected == 0 ? "> " : "  ") + "Automatic - erase the whole disk";
+                color: method-selected == 0 ? Palette.primary : Palette.text;
+                font-weight: method-selected == 0 ? 700 : 400;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: (method-selected == 1 ? "> " : "  ") + "Assisted - use existing free space";
+                color: method-selected == 1 ? Palette.primary : Palette.text;
+                font-weight: method-selected == 1 ? 700 : 400;
+                horizontal-alignment: center;
+            }
+        }
+
+        if stage == PartModeStage.AssistedError : VerticalLayout {
+            alignment: center;
+            spacing: 8px;
+            Text {
+                text: error-text;
+                color: Palette.secondary;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "Enter to go back";
+                color: Palette.subtext;
+                font-size: 14px;
+                horizontal-alignment: center;
+            }
+        }
+
+        if stage == PartModeStage.ConfirmSwap : VerticalLayout {
+            alignment: center;
+            spacing: 8px;
+            if free-gib-text != "" : Text {
+                text: free-gib-text;
+                color: Palette.subtext;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: (swap-selected == 0 ? "> " : "  ") + "No swap partition";
+                color: swap-selected == 0 ? Palette.primary : Palette.text;
+                font-weight: swap-selected == 0 ? 700 : 400;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: (swap-selected == 1 ? "> " : "  ") + "Add a swap partition";
+                color: swap-selected == 1 ? Palette.primary : Palette.text;
+                font-weight: swap-selected == 1 ? 700 : 400;
+                horizontal-alignment: center;
+            }
+        }
+
+        if stage == PartModeStage.EnterSwapSize : VerticalLayout {
+            alignment: center;
+            spacing: 8px;
+            Text {
+                text: "Swap size (MiB):";
+                color: Palette.text;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: swap-size-input == "" ? "_" : swap-size-input;
+                color: Palette.text;
+                horizontal-alignment: center;
+            }
+        }
+
+        Text {
+            text: {
+                if (stage == PartModeStage.SelectMethod) { "Up/Down to select  -  Enter to continue  -  Esc to go back" }
+                else if (stage == PartModeStage.ConfirmSwap) { "Up/Down to select  -  Enter to continue  -  Esc to go back" }
+                else if (stage == PartModeStage.EnterSwapSize) { "Enter to confirm  -  Esc to go back" }
+                else { "" }
+            };
+            color: Palette.subtext;
+            font-size: 14px;
+            horizontal-alignment: center;
+        }
+    }
+}

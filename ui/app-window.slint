@@ -2,10 +2,12 @@ import { Palette } from "palette.slint";
 import { WelcomePage } from "pages/welcome.slint";
 import { KeymapPage } from "pages/keymap.slint";
 import { NetworkPage, NetMode } from "pages/network.slint";
+import { DiskSelectPage, DiskEntry } from "pages/disk_select.slint";
+import { PartitionModePage, PartModeStage } from "pages/partition_mode.slint";
 
 // grows as each build stage's pages land, same reasoning the old SCREEN_ORDER comment had -
 // not the final flow order until every step 1-13 is represented
-export enum Page { Welcome, Keymap, Network }
+export enum Page { Welcome, Keymap, Network, DiskSelect, PartitionMode }
 
 export component AppWindow inherits Window {
     title: "Kira Installer";
@@ -44,6 +46,27 @@ export component AppWindow inherits Window {
     in property <string> net-password-display;
     in property <string> net-status-text;
 
+    callback disk-select-entered();
+    callback disk-selection-changed(int);
+    callback disk-confirmed();
+    in property <[DiskEntry]> disk-entries;
+    in property <int> disk-selected;
+
+    callback partition-mode-entered();
+    callback partition-method-chosen(int);
+    callback partition-assisted-error-ack();
+    callback partition-swap-chosen(int);
+    callback partition-swap-size-char(string);
+    callback partition-swap-size-backspace();
+    callback partition-swap-size-submit();
+    callback partition-mode-back();
+    in property <PartModeStage> part-mode-stage;
+    in property <int> part-method-selected;
+    in property <int> part-swap-selected;
+    in property <string> part-free-gib-text;
+    in property <string> part-swap-size-input;
+    in property <string> part-error-text;
+
     if current-page == Page.Welcome : WelcomePage {
         continue-pressed => {
             current-page = Page.Keymap;
@@ -81,5 +104,37 @@ export component AppWindow inherits Window {
         password-submit => { network-password-submit(); }
         back-pressed => { network-back-pressed(); }
         retry-pressed => { network-retry-pressed(); }
+        continue-pressed => {
+            current-page = Page.DiskSelect;
+            disk-select-entered();
+        }
+    }
+
+    if current-page == Page.DiskSelect : DiskSelectPage {
+        entries: disk-entries;
+        selected: disk-selected;
+        selection-changed(i) => { disk-selection-changed(i); }
+        continue-pressed => {
+            disk-confirmed();
+            current-page = Page.PartitionMode;
+            partition-mode-entered();
+        }
+        back-pressed => { current-page = Page.Network; }
+    }
+
+    if current-page == Page.PartitionMode : PartitionModePage {
+        stage: part-mode-stage;
+        method-selected: part-method-selected;
+        swap-selected: part-swap-selected;
+        free-gib-text: part-free-gib-text;
+        swap-size-input: part-swap-size-input;
+        error-text: part-error-text;
+        method-chosen(i) => { partition-method-chosen(i); }
+        assisted-error-ack => { partition-assisted-error-ack(); }
+        swap-chosen(i) => { partition-swap-chosen(i); }
+        swap-size-char(c) => { partition-swap-size-char(c); }
+        swap-size-backspace => { partition-swap-size-backspace(); }
+        swap-size-submit => { partition-swap-size-submit(); }
+        back-pressed => { partition-mode-back(); }
     }
 }

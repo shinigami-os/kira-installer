@@ -65,3 +65,25 @@ pub fn list_disks() -> Vec<Disk> {
     disks.sort_by(|a, b| a.name.cmp(&b.name));
     disks
 }
+
+// best-effort: find the physical disk backing the live/installer medium (e.g. the boot USB),
+// so disk_select.rs can warn rather than let it be silently wiped as an install target.
+// Matches install.sh's get_live_disk() exactly (findmnt the live mount, resolve the real
+// backing device, ask lsblk for its parent whole-disk name) - deliberately shells out to
+// findmnt/lsblk rather than re-deriving this from /sys/block ourselves, since partition-to-
+// parent-disk resolution has enough device-naming edge cases (NVMe, MMC, device-mapper) that
+// reusing the same proven tool install.sh already relies on is safer than reinventing it
+pub fn live_disk() -> Option<String> {
+    let find_source = |target: &str| -> Option<String> {
+        let out = std::process::Command::new("findmnt").args(["-no", "SOURCE", target]).output().ok()?;
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if s.is_empty() { None } else { Some(s) }
+    };
+    let source = find_source("/installer").or_else(|| find_source("/"))?;
+    let resolved = std::fs::canonicalize(&source)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or(source);
+    let out = std::process::Command::new("lsblk").args(["-no", "PKNAME", &resolved]).output().ok()?;
+    let name = String::from_utf8_lossy(&out.stdout).lines().next().unwrap_or("").trim().to_string();
+    if name.is_empty() { None } else { Some(name) }
+}

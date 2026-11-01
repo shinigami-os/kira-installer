@@ -1,5 +1,6 @@
 mod config;
 mod disk;
+mod install;
 mod run_cmd;
 mod screens;
 
@@ -40,12 +41,13 @@ fn main() -> anyhow::Result<()> {
     });
 
     let weak = app.as_weak();
+    let cfg_ref = cfg.clone();
     app.on_keymap_confirmed(move || {
         let Some(app) = weak.upgrade() else { return };
         let entries = model_to_vec(&app.get_keymap_entries());
         let selected = app.get_keymap_selected() as usize;
         if let Some(name) = entries.get(selected) {
-            cfg.borrow_mut().keymap = name.clone();
+            cfg_ref.borrow_mut().keymap = name.clone();
         }
     });
 
@@ -107,8 +109,149 @@ fn main() -> anyhow::Result<()> {
         screens::network::back_to_devices(&app, &state);
     });
 
+    let weak = app.as_weak();
+    app.on_disk_select_entered(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let entries = screens::disk_select::scan_entries();
+        app.set_disk_entries(to_disk_model(&entries));
+        app.set_disk_selected(0);
+    });
+
+    let weak = app.as_weak();
+    app.on_disk_selection_changed(move |i| {
+        let Some(app) = weak.upgrade() else { return };
+        app.set_disk_selected(i);
+    });
+
+    let weak = app.as_weak();
+    let cfg_ref = cfg.clone();
+    app.on_disk_confirmed(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let entries = app.get_disk_entries();
+        let selected = app.get_disk_selected() as usize;
+        if let Some(entry) = entries.row_data(selected) {
+            cfg_ref.borrow_mut().target_disk = entry.short_name.to_string();
+        }
+    });
+
+    let part_state = Rc::new(RefCell::new(screens::partition_mode::new_state()));
+
+    let weak = app.as_weak();
+    let state = part_state.clone();
+    let cfg_ref = cfg.clone();
+    app.on_partition_mode_entered(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let disk = cfg_ref.borrow().target_disk.clone();
+        screens::partition_mode::enter(&mut state.borrow_mut(), &disk);
+        render_partition_mode(&app, &state.borrow());
+    });
+
+    let weak = app.as_weak();
+    let state = part_state.clone();
+    app.on_partition_method_chosen(move |i| {
+        let Some(app) = weak.upgrade() else { return };
+        screens::partition_mode::method_chosen(&mut state.borrow_mut(), i);
+        render_partition_mode(&app, &state.borrow());
+    });
+
+    let weak = app.as_weak();
+    let state = part_state.clone();
+    app.on_partition_assisted_error_ack(move || {
+        let Some(app) = weak.upgrade() else { return };
+        screens::partition_mode::assisted_error_ack(&mut state.borrow_mut());
+        render_partition_mode(&app, &state.borrow());
+    });
+
+    let weak = app.as_weak();
+    let state = part_state.clone();
+    let cfg_ref = cfg.clone();
+    app.on_partition_swap_chosen(move |i| {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some((method, want_swap, mib)) = screens::partition_mode::swap_chosen(&mut state.borrow_mut(), i) {
+            commit_partition_choice(&cfg_ref, method, want_swap, mib);
+        }
+        render_partition_mode(&app, &state.borrow());
+    });
+
+    let weak = app.as_weak();
+    let state = part_state.clone();
+    app.on_partition_swap_size_char(move |c| {
+        let Some(app) = weak.upgrade() else { return };
+        screens::partition_mode::swap_size_char(&mut state.borrow_mut(), c.as_str());
+        render_partition_mode(&app, &state.borrow());
+    });
+
+    let weak = app.as_weak();
+    let state = part_state.clone();
+    app.on_partition_swap_size_backspace(move || {
+        let Some(app) = weak.upgrade() else { return };
+        screens::partition_mode::swap_size_backspace(&mut state.borrow_mut());
+        render_partition_mode(&app, &state.borrow());
+    });
+
+    let weak = app.as_weak();
+    let state = part_state.clone();
+    let cfg_ref = cfg.clone();
+    app.on_partition_swap_size_submit(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some((method, want_swap, mib)) = screens::partition_mode::swap_size_submit(&mut state.borrow_mut()) {
+            commit_partition_choice(&cfg_ref, method, want_swap, mib);
+        }
+        render_partition_mode(&app, &state.borrow());
+    });
+
+    let weak = app.as_weak();
+    let state = part_state.clone();
+    app.on_partition_mode_back(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let at_top = screens::partition_mode::view(&state.borrow()).stage
+            == screens::partition_mode::ViewStage::SelectMethod;
+        if at_top {
+            app.set_current_page(Page::DiskSelect);
+        } else {
+            screens::partition_mode::back_to_method(&mut state.borrow_mut());
+            render_partition_mode(&app, &state.borrow());
+        }
+    });
+
     app.run()?;
     Ok(())
+}
+
+fn commit_partition_choice(cfg: &Rc<RefCell<config::InstallConfig>>, method: config::PartitionMode, want_swap: bool, swap_size_mib: u32) {
+    let mut c = cfg.borrow_mut();
+    c.partition_mode = method;
+    c.want_swap = want_swap;
+    c.swap_size_mib = swap_size_mib;
+    // no next page yet - stage 4 ends here, same "stays put" precedent every earlier stage's
+    // not-yet-built next step followed
+}
+
+fn render_partition_mode(app: &AppWindow, state: &screens::partition_mode::State) {
+    let v = screens::partition_mode::view(state);
+    app.set_part_mode_stage(match v.stage {
+        screens::partition_mode::ViewStage::SelectMethod => PartModeStage::SelectMethod,
+        screens::partition_mode::ViewStage::AssistedError => PartModeStage::AssistedError,
+        screens::partition_mode::ViewStage::ConfirmSwap => PartModeStage::ConfirmSwap,
+        screens::partition_mode::ViewStage::EnterSwapSize => PartModeStage::EnterSwapSize,
+    });
+    app.set_part_method_selected(v.method_selected);
+    app.set_part_swap_selected(v.swap_selected);
+    app.set_part_free_gib_text(v.free_gib_text.into());
+    app.set_part_swap_size_input(v.swap_size_input.into());
+    app.set_part_error_text(v.error_text.into());
+}
+
+fn to_disk_model(entries: &[screens::disk_select::Entry]) -> ModelRc<DiskEntry> {
+    let items: Vec<DiskEntry> = entries
+        .iter()
+        .map(|e| DiskEntry {
+            short_name: e.short_name.as_str().into(),
+            label: e.label.as_str().into(),
+            is_live: e.is_live_disk,
+        })
+        .collect();
+    ModelRc::new(VecModel::from(items))
 }
 
 // shared by both the initial on-enter scan and every subsequent Up/Down move - loadkmap runs

@@ -48,6 +48,10 @@ export component NetworkPage inherits Rectangle {
                     device-chosen(-1);
                     return accept;
                 }
+                if (event.text == Key.Escape) {
+                    back-pressed();
+                    return accept;
+                }
                 return reject;
             }
             if (mode == NetMode.SelectSsid) {
@@ -96,11 +100,19 @@ export component NetworkPage inherits Rectangle {
                     continue-pressed();
                     return accept;
                 }
+                if (event.text == Key.Escape) {
+                    back-pressed();
+                    return accept;
+                }
                 return reject;
             }
             if (mode == NetMode.Failed) {
                 if (event.text == Key.Return) {
                     retry-pressed();
+                    return accept;
+                }
+                if (event.text == Key.Escape) {
+                    back-pressed();
                     return accept;
                 }
                 return reject;
@@ -196,11 +208,11 @@ export component NetworkPage inherits Rectangle {
 
         Text {
             text: {
-                if (mode == NetMode.SelectDevice) { "Up/Down to select  -  Enter to continue" }
+                if (mode == NetMode.SelectDevice) { "Up/Down to select  -  Enter to continue  -  Esc to go back" }
                 else if (mode == NetMode.SelectSsid) { "Up/Down to select  -  Enter to connect  -  Esc to go back" }
                 else if (mode == NetMode.EnterPassword) { "Enter to connect  -  Esc to go back" }
-                else if (mode == NetMode.Done) { "Enter to continue" }
-                else if (mode == NetMode.Failed) { "Enter to try again" }
+                else if (mode == NetMode.Done) { "Enter to continue  -  Esc to reconsider" }
+                else if (mode == NetMode.Failed) { "Enter to try again  -  Esc to go back" }
                 else { "" }
             };
             color: Palette.subtext;

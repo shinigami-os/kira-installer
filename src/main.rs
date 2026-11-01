@@ -99,7 +99,11 @@ fn main() -> anyhow::Result<()> {
     let state = net_state.clone();
     app.on_network_back_pressed(move || {
         let Some(app) = weak.upgrade() else { return };
-        screens::network::back_to_devices(&app, &state);
+        if screens::network::is_device_list(&state) {
+            app.set_current_page(Page::Keymap);
+        } else {
+            screens::network::back_to_devices(&app, &state);
+        }
     });
 
     let weak = app.as_weak();

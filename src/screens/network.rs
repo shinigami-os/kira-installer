@@ -384,3 +384,14 @@ pub fn back_to_devices(app: &AppWindow, state: &SharedNetworkState) {
     render(app, state);
 }
 
+// true when the device list is the current sub-state - the "top" of this page's own flow.
+// Used to decide what Esc means: everywhere else on this page it resets to a fresh device
+// scan (reconsider the network choice without leaving the page), but at the top level there's
+// nothing left to reset to, so it should leave the page entirely instead. Found missing
+// entirely via live testing: SelectDevice/Done/Failed had no Esc handler at all before this,
+// and even where Esc *was* handled it only ever reset within this page - there was no way to
+// leave the Network page and return to Keymap at all.
+pub fn is_device_list(state: &SharedNetworkState) -> bool {
+    matches!(state.lock().unwrap().mode, Mode::SelectDevice { .. })
+}
+

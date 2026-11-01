@@ -214,6 +214,14 @@ fn main() -> anyhow::Result<()> {
         }
     });
 
+    let weak = app.as_weak();
+    let state = part_state.clone();
+    app.on_partition_confirmed_redo(move || {
+        let Some(app) = weak.upgrade() else { return };
+        screens::partition_mode::confirmed_redo(&mut state.borrow_mut());
+        render_partition_mode(&app, &state.borrow());
+    });
+
     app.run()?;
     Ok(())
 }
@@ -234,12 +242,14 @@ fn render_partition_mode(app: &AppWindow, state: &screens::partition_mode::State
         screens::partition_mode::ViewStage::AssistedError => PartModeStage::AssistedError,
         screens::partition_mode::ViewStage::ConfirmSwap => PartModeStage::ConfirmSwap,
         screens::partition_mode::ViewStage::EnterSwapSize => PartModeStage::EnterSwapSize,
+        screens::partition_mode::ViewStage::Confirmed => PartModeStage::Confirmed,
     });
     app.set_part_method_selected(v.method_selected);
     app.set_part_swap_selected(v.swap_selected);
     app.set_part_free_gib_text(v.free_gib_text.into());
     app.set_part_swap_size_input(v.swap_size_input.into());
     app.set_part_error_text(v.error_text.into());
+    app.set_part_summary_text(v.summary_text.into());
 }
 
 fn to_disk_model(entries: &[screens::disk_select::Entry]) -> ModelRc<DiskEntry> {

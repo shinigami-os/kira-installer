@@ -91,6 +91,19 @@ fn disk_total_mib(disk: &str) -> Option<u64> {
         .and_then(|v| v.trim().trim_end_matches("MiB").parse().ok())
 }
 
+// read-only - used by disk_select.rs to show each candidate disk's existing layout before any
+// choice is made, so "Assisted" mode's viability is visible at a glance rather than only
+// discovered after already picking a disk and a partitioning method
+pub fn partition_count(disk: &str) -> u32 {
+    let Ok(out) = std::process::Command::new("parted").args(["-s", disk, "print"]).output() else {
+        return 0;
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter(|l| l.trim_start().split_whitespace().next().is_some_and(|f| f.parse::<u32>().is_ok()))
+        .count() as u32
+}
+
 fn last_partition_number(disk: &str) -> u32 {
     let Ok(out) = std::process::Command::new("parted").args(["-s", disk, "print"]).output() else {
         return 0;

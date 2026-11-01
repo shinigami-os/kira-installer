@@ -60,12 +60,14 @@ export component AppWindow inherits Window {
     callback partition-swap-size-backspace();
     callback partition-swap-size-submit();
     callback partition-mode-back();
+    callback partition-confirmed-redo();
     in property <PartModeStage> part-mode-stage;
     in property <int> part-method-selected;
     in property <int> part-swap-selected;
     in property <string> part-free-gib-text;
     in property <string> part-swap-size-input;
     in property <string> part-error-text;
+    in property <string> part-summary-text;
 
     if current-page == Page.Welcome : WelcomePage {
         continue-pressed => {
@@ -129,6 +131,7 @@ export component AppWindow inherits Window {
         free-gib-text: part-free-gib-text;
         swap-size-input: part-swap-size-input;
         error-text: part-error-text;
+        summary-text: part-summary-text;
         method-chosen(i) => { partition-method-chosen(i); }
         assisted-error-ack => { partition-assisted-error-ack(); }
         swap-chosen(i) => { partition-swap-chosen(i); }
@@ -136,5 +139,6 @@ export component AppWindow inherits Window {
         swap-size-backspace => { partition-swap-size-backspace(); }
         swap-size-submit => { partition-swap-size-submit(); }
         back-pressed => { partition-mode-back(); }
+        confirmed-redo => { partition-confirmed-redo(); }
     }
 }

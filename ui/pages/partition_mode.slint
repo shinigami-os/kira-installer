@@ -1,6 +1,6 @@
 import { Palette } from "../palette.slint";
 
-export enum PartModeStage { SelectMethod, AssistedError, ConfirmSwap, EnterSwapSize }
+export enum PartModeStage { SelectMethod, AssistedError, ConfirmSwap, EnterSwapSize, Confirmed }
 
 export component PartitionModePage inherits Rectangle {
     width: 100%;
@@ -13,6 +13,7 @@ export component PartitionModePage inherits Rectangle {
     in property <string> free-gib-text;
     in property <string> swap-size-input;
     in property <string> error-text;
+    in property <string> summary-text;
 
     callback method-chosen(int);
     callback assisted-error-ack();
@@ -21,6 +22,7 @@ export component PartitionModePage inherits Rectangle {
     callback swap-size-backspace();
     callback swap-size-submit();
     callback back-pressed();
+    callback confirmed-redo();
 
     init => { key-handler.focus(); }
 
@@ -86,6 +88,13 @@ export component PartitionModePage inherits Rectangle {
                 }
                 swap-size-char(event.text);
                 return accept;
+            }
+            if (stage == PartModeStage.Confirmed) {
+                if (event.text == Key.Return || event.text == Key.Escape) {
+                    confirmed-redo();
+                    return accept;
+                }
+                return reject;
             }
             reject
         }
@@ -175,11 +184,29 @@ export component PartitionModePage inherits Rectangle {
             }
         }
 
+        if stage == PartModeStage.Confirmed : VerticalLayout {
+            alignment: center;
+            spacing: 8px;
+            Text {
+                text: summary-text;
+                color: Palette.primary;
+                font-weight: 700;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "more install steps land in a later build stage";
+                color: Palette.subtext;
+                font-size: 13px;
+                horizontal-alignment: center;
+            }
+        }
+
         Text {
             text: {
                 if (stage == PartModeStage.SelectMethod) { "Up/Down to select  -  Enter to continue  -  Esc to go back" }
                 else if (stage == PartModeStage.ConfirmSwap) { "Up/Down to select  -  Enter to continue  -  Esc to go back" }
                 else if (stage == PartModeStage.EnterSwapSize) { "Enter to confirm  -  Esc to go back" }
+                else if (stage == PartModeStage.Confirmed) { "Enter or Esc to change your choice" }
                 else { "" }
             };
             color: Palette.subtext;

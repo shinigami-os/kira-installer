@@ -59,7 +59,7 @@ build/live-rootfs-console.tar.xz: build/kira-base.tar.xz $(KIRA_BASE_INITRAMFS) 
 	sudo mount --bind /dev $(ROOT_CONSOLE)/dev; \
 	sudo mount --bind /dev/pts $(ROOT_CONSOLE)/dev/pts; \
 	sudo cp /etc/resolv.conf $(ROOT_CONSOLE)/etc/resolv.conf; \
-	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux update; \
+	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux check; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-installer-tools; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y kira-net; \
 	sudo chroot $(ROOT_CONSOLE) /usr/bin/flux install -y linux-firmware-intel; \
@@ -95,7 +95,7 @@ build/live-rootfs-desktop.tar.xz: build/kira-base.tar.xz $(KIRA_BASE_INITRAMFS) 
 	sudo mount --bind /dev $(ROOT_DESKTOP)/dev; \
 	sudo mount --bind /dev/pts $(ROOT_DESKTOP)/dev/pts; \
 	sudo cp /etc/resolv.conf $(ROOT_DESKTOP)/etc/resolv.conf; \
-	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux update; \
+	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux check; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-installer-tools; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y kira-net; \
 	sudo chroot $(ROOT_DESKTOP) /usr/bin/flux install -y linux-firmware-intel; \

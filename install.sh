@@ -664,7 +664,7 @@ has_nvidia_gpu() {
 
 packages_install() {
     announce "Installing base packages..."
-    chroot "$MOUNT_POINT" flux update
+    chroot "$MOUNT_POINT" flux check
     for pkg in $PACKAGES; do
         chroot_flux_install "$pkg"
     done
@@ -824,11 +824,11 @@ main() {
     # apply_user_setup needs the real useradd/chpasswd from the shadow package, and
     # apply_tier_config (right after it) needs the home directory useradd creates - so shadow
     # has to be pulled in on its own ahead of the main package list, not found partway through it
-    chroot "$MOUNT_POINT" flux update
-    # flux's own update falls back to a plain tarball download the first time
-    # git isn't there, but every update after that assumes git and just runs
+    chroot "$MOUNT_POINT" flux check
+    # flux's own recipe sync falls back to a plain tarball download the first time
+    # git isn't there, but every sync after that assumes git and just runs
     # "git -C ... pull" - installing it now (still git-independent, a plain
-    # Alpine package fetch) keeps every later flux update in this chroot from
+    # Alpine package fetch) keeps every later flux check in this chroot from
     # breaking, instead of only the very first one being tolerant of it
     chroot_flux_install git
     chroot_flux_install shadow

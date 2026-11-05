@@ -1,7 +1,7 @@
 KERNEL ?= ../shinigami/arch/x86/boot/bzImage
 KIRA_BASE_INITRAMFS ?= ../kira-base/build/initramfs.cpio.gz
 KIRA_BASE_ROOTFS ?= ../kira-base/build/rootfs.tar.xz
-# Choose DE between sleex, swayFX
+# desktop environment baked into the desktop ISO
 DE ?= sleex
 
 # Mount points for the chroot used to build each installer environment.

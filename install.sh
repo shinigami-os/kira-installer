@@ -166,7 +166,11 @@ select_keymap() {
         [ -f "$f" ] || continue
         i=$((i + 1))
         name=$(basename "$f" .bmap)
-        KEYMAP_NAMES="$KEYMAP_NAMES $name"
+        # a leading space here (plain "$KEYMAP_NAMES $name" from an empty start) becomes a
+        # blank first line once piped through tr '\n' below, shifting every menu number
+        # printed above off by one from what sed actually selects - confirmed live: picking
+        # "3) fr-azerty" silently applied "es" instead
+        KEYMAP_NAMES="${KEYMAP_NAMES:+$KEYMAP_NAMES }$name"
         default_tag=""
         [ "$name" = "us" ] && default_tag=" (default)"
         echo "  $i) $name$default_tag"

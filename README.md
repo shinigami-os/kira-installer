@@ -11,7 +11,7 @@ Builds two live-bootable ISO variants and provides the guided (not automatic) sh
 | `make desktop` | `build/kira-desktop-$(DE).iso` | Base + one desktop environment baked in |
 | `make all` | both | |
 
-`DE` selects which desktop environment gets baked into the desktop ISO at build time: `sleex` (the default, and currently the only one).
+`DE` selects which desktop environment gets baked into the desktop ISO at build time: `sleex` (the default, and currently the only one). The Line, Kira's own desktop, is not an ISO or installer option yet: it is installed afterwards with `flux install kira-the-line`.
 
 ```sh
 make console
@@ -34,7 +34,7 @@ make console          # or: make desktop DE=sleex
 Per variant, the pipeline:
 1. Extracts kira-base's `rootfs.tar.xz` into a scratch chroot (`/tmp/kira-installer-root-console` or `-desktop`).
 2. Bind-mounts `/proc`, `/sys`, `/dev`, `/dev/pts`, copies in a working `resolv.conf`.
-3. Runs `flux update` + `flux install -y <pkg>` inside the chroot for the packages every install needs regardless of tier: `kira-installer-tools`, `kira-net`, `linux-firmware-intel`, `kira-login`, `kira-seat`, `kira-session-bus`, `zsh`, `zsh-plugins`, `kira-branding`. For the desktop variant, also installs `kira-desktop-$(DE)`, plus `linux-firmware-nvidia`. Both firmware packages are unconditional here (unlike `install.sh`'s own hardware-detected install onto the target disk) since the live/try-before-install session needs working display and wifi hardware too, before any of that detection ever runs.
+3. Runs `flux check` + `flux install -y <pkg>` inside the chroot for the packages every install needs regardless of tier: `kira-installer-tools`, `kira-net`, `linux-firmware-intel`, `kira-login`, `kira-seat`, `kira-session-bus`, `zsh`, `zsh-plugins`, `kira-branding`. For the desktop variant, also installs `kira-desktop-$(DE)`, plus `linux-firmware-nvidia`. Both firmware packages are unconditional here (unlike `install.sh`'s own hardware-detected install onto the target disk) since the live/try-before-install session needs working display and wifi hardware too, before any of that detection ever runs.
 4. Writes `/etc/kira-tier` (`server` or `desktop`) into the chroot : this is the ISO's own coarse tier, read again and refined at install time (see below).
 5. Copies `install.sh` into the chroot as `/usr/bin/kira-install`, stages the kernel/initramfs/rootfs tarball under `/installer/` so the installed system's own bootstrapping has something to start from.
 6. Repacks the whole chroot into `live-rootfs-{console,desktop}.tar.xz` : this is what the live ISO actually extracts into tmpfs at boot, **not** a bootable initramfs itself.
@@ -52,14 +52,14 @@ Runs as `kira-install` from inside the live environment. Fully guided, no non-in
 4. **Base system** : extracts the staged `kira-base.tar.xz` onto the target, excluding runtime-only paths (`/tmp`, `/proc`, `/sys`, `/dev`, `/mnt`, `/run`, flux's cache/installed-db dirs), then recreates them empty.
 5. **Kernel + fstab + hostname** : copies `bzImage`/`initramfs.cpio.gz` to `/boot` under a real `uname`-style name, writes `/etc/fstab` from the actual partition UUIDs, prompts for a hostname.
 6. **Tier selection** : prompts `1) Sleex  2) server`, refining `/etc/kira-tier` from the ISO's coarse `desktop`/`server` value into `desktop-sleex` / `server`, and drops a matching `~/.config/kira-desktop/active-de` for both `root` and the new user.
-7. **Package install** : chroots in, `flux update`, then the same tier-independent package set the ISO baked in, plus `kira-desktop-sleex` + `netsurf` + `git` + `greetd` for whichever desktop tier was chosen. Detects Intel wifi hardware (`/sys/bus/pci/devices/*`, class `0x028*`) and installs `linux-firmware-intel` only when present.
+7. **Package install** : chroots in, `flux check`, then the same tier-independent package set the ISO baked in, plus `kira-desktop-sleex` + `netsurf` + `git` + `greetd` for whichever desktop tier was chosen. Detects Intel wifi hardware (`/sys/bus/pci/devices/*`, class `0x028*`) and installs `linux-firmware-intel` only when present.
 8. **Users** : root password, then a new user (`kira` if left blank) in `wheel,video,input,audio`, `/bin/zsh` as shell.
 9. **Bootloader** : `grub-install --target=x86_64-efi` + `grub-mkconfig`, either onto the ESP this run just created or an existing one found elsewhere on the disk.
 10. **Cleanup + reboot prompt.**
 
 ### Login path note
 
-The tier-independent package set above still includes `kira-login`/`kira-seat` : the original getty-tty1-driven autologin flow (zsh-login script + seatd). That remains the real login path for `server` tier, which never installs `greetd`. For desktop tier, `greetd` (installed alongside the DE package) is now the actual path: cage + regreet on tty1, with `greetd`'s own `%post-install` disabling `getty-tty1` so the two never race for the same VT.
+The tier-independent package set above still includes `kira-login`/`kira-seat` : the original getty-tty1-driven autologin flow (zsh-login script + seatd). That remains the real login path for `server` tier, which never installs `greetd`. For desktop tier, `greetd` (installed alongside the DE package) is now the actual path: cage hosting the Quickshell login screen on tty1 (`kira-greetd`), with `greetd`'s own `%post-install` disabling `getty-tty1` so the two never race for the same VT.
 
 ## Repository Layout
 

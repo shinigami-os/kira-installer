@@ -1,16 +1,13 @@
-VERISON=26.09-2
-
+#!/bin/sh
+# Usage: ./make_release.sh <version>
 set -e
 
-echo "Building console ISO..."
-sudo make clean && sudo make console
-echo "=========================== Saving console ISO... ==========================="
-../kira-base/scripts/push-iso-release.sh $VERISON console
+VERSION="${1:?usage: ./make_release.sh <version>}"
 
-echo "Building desktop Sleex ISO..."
-sudo make clean && sudo make desktop DE=sleex
-echo "=========================== Saving desktop Sleex ISO... ==========================="
-../kira-base/scripts/push-iso-release.sh $VERISON sleex
+echo "Building the installer ISO..."
+sudo make clean && sudo make iso
+echo "=========================== Saving the installer ISO... ==========================="
+../kira-base/scripts/push-iso-release.sh "$VERSION"
 
 echo ""
 echo "Done ! "

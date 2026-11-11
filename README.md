@@ -1,81 +1,68 @@
 # kira-installer
-> Live ISO build scripts and TUI installer for Kira Linux.
+> The Kira Linux installer, and the one live ISO that is only that.
 
-Builds two live-bootable ISO variants and provides the guided (not automatic) shell installer that runs from either one. No GUI wizard, no hand-holding: the installer expects the user to know what a partition is.
+Kira ships a single ISO. It does not boot into a desktop or a shell: it boots straight into the installer, a fullscreen app running inside [cage](https://github.com/cage-kiosk/cage) on tty1, with no login and no way out of it except rebooting or powering off. Everything else (the desktop, the shell, the packages) is installed onto the disk by the installer through flux.
 
-## ISO variants
+The app is a Quickshell (QML) application styled after The Line. It asks a few questions, shows what it is about to do, and writes nothing to a disk until you hold the button on the review screen.
 
-| Target | Output | Contents |
-|---|---|---|
-| `make console` | `build/kira-console.iso` | Base system only: shell, flux, no DE |
-| `make desktop` | `build/kira-desktop-$(DE).iso` | Base + one desktop environment baked in |
-| `make all` | both | |
+## The installer
 
-`DE` selects which desktop environment gets baked into the desktop ISO at build time: `sleex` (the default, and currently the only one). The Line, Kira's own desktop, is not an ISO or installer option yet: it is installed afterwards with `flux install kira-the-line`.
+Steps, one tick each on the ruler: welcome, keyboard, network, disk, how much of it, swap, hostname, user, password, root, timezone, system, review (hold to confirm), install, done.
 
-```sh
-make console
-make desktop DE=sleex
-make all DE=sleex
+- **Keyboard and network.** The keymap is written to the installed system. Wi-Fi set up during the session carries over to it.
+- **Disk.** Wipe a whole disk (GPT: a 512 MiB EFI system partition, optional swap, ext4 root) or install into the largest free region of an existing one. The disk the medium booted from is refused. At least 15 GiB is needed.
+- **System.** Pick one: **The Line** (Kira's own desktop), **Sleex** (the AxOS desktop), or **Server** (a shell and nothing else). Another one can be added later with flux.
+- **Install.** The base system is copied from the medium, then the packages for the chosen system are installed with flux (retried on a network error), then GRUB for UEFI. A failed install unmounts everything, so trying again from the app just works.
+- **Done.** Reboot or power off. There is no shell to stay in.
+
+UEFI only. Full manual partitioning is not available.
+
+## Layout
+
+```
+app/                         the installer
+  shell.qml                  window, ruler, hints, keys, power-off dialog
+  launch.sh                  what cage runs on the live medium
+  backend/kira-install-backend   probes, and the real install (the app never runs a pipeline itself)
+  services/                  Theme, Anim (the style guide tokens), Installer (state and processes)
+  components/                Page, ListRow, Choice, Field, HoldButton, Ruler, ...
+  pages/                     one screen per step
+iso/sv/kira-installer/       the runit service that starts cage and the app on tty1
+Makefile                     builds the ISO
+grub.cfg, grub-early.cfg     the ISO's GRUB menu (search by the ISO9660 label KIRA)
+make_release.sh              build the ISO and publish it
 ```
 
-Both variants boot through the same minimal `switch_root` initramfs kira-base produces (`runit/1-initramfs`) : the live ISO and an installed disk share the exact boot path, just with different `root=` kernel cmdline values (`root=live` vs `root=/dev/...`).
+The backend takes the answers as `KI_*` environment variables (never argv, so passwords stay out of `ps`) and reports on stdout with `@progress N text`, `@error text` and `@done`.
 
-## Build pipeline
+## Trying it without touching a disk
 
-Requires `../shinigami` and `../kira-base` built first (the Makefile checks for `shinigami/arch/x86/boot/bzImage` and `kira-base/build/{rootfs.tar.xz,initramfs.cpio.gz}` and fails loudly with the exact command to run if either is missing):
+Inside a Wayland session with `quickshell` installed:
+
+```sh
+KI_DRY=1 qs -p app
+```
+
+`KI_DRY=1` walks every stage without running anything, and Esc closes the window instead of asking to power off.
+
+## Building the ISO
+
+Needs `../shinigami` and `../kira-base` built first (the Makefile fails with the exact command to run if the kernel, initramfs or rootfs is missing), plus `xorriso`, `grub-mkimage` and `mtools`, and root for the chroot:
 
 ```sh
 make -C ../shinigami
 make -C ../kira-base
-make console          # or: make desktop DE=sleex
+sudo make iso            # build/kira-installer.iso
+make qemu                # boot it in QEMU with OVMF
 ```
 
-Per variant, the pipeline:
-1. Extracts kira-base's `rootfs.tar.xz` into a scratch chroot (`/tmp/kira-installer-root-console` or `-desktop`).
-2. Bind-mounts `/proc`, `/sys`, `/dev`, `/dev/pts`, copies in a working `resolv.conf`.
-3. Runs `flux check` + `flux install -y <pkg>` inside the chroot for the packages every install needs regardless of tier: `kira-installer-tools`, `kira-net`, `linux-firmware-intel`, `kira-login`, `kira-seat`, `kira-session-bus`, `zsh`, `zsh-plugins`, `kira-branding`. For the desktop variant, also installs `kira-desktop-$(DE)`, plus `linux-firmware-nvidia`. Both firmware packages are unconditional here (unlike `install.sh`'s own hardware-detected install onto the target disk) since the live/try-before-install session needs working display and wifi hardware too, before any of that detection ever runs.
-4. Writes `/etc/kira-tier` (`server` or `desktop`) into the chroot : this is the ISO's own coarse tier, read again and refined at install time (see below).
-5. Copies `install.sh` into the chroot as `/usr/bin/kira-install`, stages the kernel/initramfs/rootfs tarball under `/installer/` so the installed system's own bootstrapping has something to start from.
-6. Repacks the whole chroot into `live-rootfs-{console,desktop}.tar.xz` : this is what the live ISO actually extracts into tmpfs at boot, **not** a bootable initramfs itself.
-7. Assembles the ISO: `bzImage` + `initramfs.cpio.gz` + the rootfs tarball + a GRUB EFI image (`grub-mkimage`, `BOOTX64.EFI`) at the ISO9660 root, via `xorriso`.
+The build:
+1. Extracts kira-base's `rootfs.tar.xz` into a scratch chroot and installs, with flux, what the app needs to run: the installer tools, networking, seatd, cage, Quickshell with Qt's graphics drivers, fonts and firmware.
+2. Copies the app to `/usr/share/kira-installer`, adds the runit service, and **removes every other way into a shell**: the gettys, the serial console and sshd.
+3. Stages the kernel, initramfs and base rootfs under `/installer/`, which is what gets copied onto the target disk.
+4. Repacks the chroot into `live-rootfs.tar.xz`, extracted into tmpfs at boot by kira-base's `switch_root` initramfs, and assembles the ISO (kernel, initramfs, rootfs tarball, GRUB EFI image) with `xorriso`.
 
-`make qemu-console` / `make qemu-desktop DE=<de>` boot the resulting ISO directly in QEMU with OVMF, serial console attached.
-
-## Installer (`install.sh`)
-
-Runs as `kira-install` from inside the live environment. Fully guided, no non-interactive mode:
-
-1. **Network** : `nmcli` device/SSID prompts (wifi or ethernet), confirms connectivity with a ping.
-2. **Partitioning** : guided whole-disk (wipes and creates GPT: ESP + optional swap + ext4 root) or guided free-space (finds the largest free region on an existing disk, partitions just that). Full manual mode is a documented stub (`3) not implemented`).
-3. **Format + mount** : `mkfs.fat`/`mkfs.ext4`/`mkswap` as needed, mounts under `/mnt`.
-4. **Base system** : extracts the staged `kira-base.tar.xz` onto the target, excluding runtime-only paths (`/tmp`, `/proc`, `/sys`, `/dev`, `/mnt`, `/run`, flux's cache/installed-db dirs), then recreates them empty.
-5. **Kernel + fstab + hostname** : copies `bzImage`/`initramfs.cpio.gz` to `/boot` under a real `uname`-style name, writes `/etc/fstab` from the actual partition UUIDs, prompts for a hostname.
-6. **Tier selection** : prompts `1) Sleex  2) server`, refining `/etc/kira-tier` from the ISO's coarse `desktop`/`server` value into `desktop-sleex` / `server`, and drops a matching `~/.config/kira-desktop/active-de` for both `root` and the new user.
-7. **Package install** : chroots in, `flux check`, then the same tier-independent package set the ISO baked in, plus `kira-desktop-sleex` + `netsurf` + `git` + `greetd` for whichever desktop tier was chosen. Detects Intel wifi hardware (`/sys/bus/pci/devices/*`, class `0x028*`) and installs `linux-firmware-intel` only when present.
-8. **Users** : root password, then a new user (`kira` if left blank) in `wheel,video,input,audio`, `/bin/zsh` as shell.
-9. **Bootloader** : `grub-install --target=x86_64-efi` + `grub-mkconfig`, either onto the ESP this run just created or an existing one found elsewhere on the disk.
-10. **Cleanup + reboot prompt.**
-
-### Login path note
-
-The tier-independent package set above still includes `kira-login`/`kira-seat` : the original getty-tty1-driven autologin flow (zsh-login script + seatd). That remains the real login path for `server` tier, which never installs `greetd`. For desktop tier, `greetd` (installed alongside the DE package) is now the actual path: cage hosting the Quickshell login screen on tty1 (`kira-greetd`), with `greetd`'s own `%post-install` disabling `getty-tty1` so the two never race for the same VT.
-
-## Repository Layout
-
-```
-kira-installer/
-  Makefile           ISO build pipeline (console + desktop x DE variants)
-  install.sh         the guided installer itself, runs as /usr/bin/kira-install
-  grub.cfg           live-ISO GRUB menu (search by ISO9660 label "KIRA", root=live)
-  grub-early.cfg     embedded config for grub-mkimage's BOOTX64.EFI
-  releases/          built ISOs kept for distribution (e.g. kira-console-26.07.iso)
-  build/             GITIGNORED: chroots, tarballs, EFI images, final .iso files
-```
-
-## Status
-
-Actively built and working: both ISO variants build and boot on real hardware, the guided installer completes a full disk install (whole-disk and free-space modes), and the resulting system boots via GRUB into either tier. Full manual partitioning mode is not implemented. See the [Kira Linux specification](https://github.com/shinigami-os) and the project roadmap.
+`./make_release.sh <version>` builds from scratch and publishes the ISO.
 
 ## License
 GPL-2.0

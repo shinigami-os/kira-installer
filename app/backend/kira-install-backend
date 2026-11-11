@@ -1,0 +1,481 @@
+#!/bin/sh
+# kira-install-backend: everything the installer app does that touches the machine.
+#
+# The QML app never runs a pipeline of its own. It asks this script questions (probe commands)
+# and, once the user has held the button on the review screen, hands it every answer as KI_*
+# environment variables (never argv: passwords must not show up in `ps`) and reads its stdout.
+#
+#   check              uefi=0|1, root=0|1
+#   disks              one lsblk -P line per installable disk, LIVE="1" on the medium we booted from
+#   layout DISK        lsblk -P lines for DISK and its partitions
+#   free DISK          "START END" in MiB of the largest free region on DISK, or nothing
+#   keymaps            names of the console keymaps the live image ships
+#   install            the real thing; talks back with the protocol below
+#
+# install protocol (one message per line on stdout, anything else is plain log):
+#   @progress <0-100> <what it is doing now>
+#   @error <message>
+#   @done
+#
+# KI_DRY=1 walks the same stages without touching anything (used to try the app in a session).
+#
+# The logic is the one of the former install.sh, minus every prompt.
+
+KEYMAP_LIB="/usr/share/kira-keymaps"
+MOUNT_POINT="/mnt"
+KERNEL_IMAGE="/installer/bzImage"
+INITRAMFS_IMAGE="/installer/initramfs.cpio.gz"
+TARBALL="/installer/kira-base.tar.xz"
+PACKAGES="shadow shadow-login zsh kira-zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus zlib flex bison pkgconf kira-basic-tools kira-build-essential os-prober grub grub-efi efivar efibootmgr nano sudo git chrony tzdata"
+PACKAGES_SLEEX="kira-desktop-sleex netsurf git greetd"
+PACKAGES_THE_LINE="kira-the-line kira-desktop-apps git greetd"
+MIN_MIB=15360
+
+# ---------------------------------------------------------------- probes
+
+# the live environment's blkid is BusyBox's applet, which ignores -s/-o: parse its default
+# output by hand, which works on both BusyBox's blkid and util-linux's
+blkid_uuid() {
+    blkid "$1" | sed -n 's/.*UUID="\([^"]*\)".*/\1/p'
+}
+
+# best-effort: the physical disk backing the live medium, so the app can refuse it as a target
+get_live_disk() {
+    src=$(findmnt -no SOURCE /installer 2>/dev/null || findmnt -no SOURCE / 2>/dev/null)
+    [ -z "$src" ] && return 0
+    src=$(readlink -f "$src" 2>/dev/null || echo "$src")
+    lsblk -no PKNAME "$src" 2>/dev/null | head -1
+}
+
+probe_check() {
+    if [ -d /sys/firmware/efi ]; then echo "uefi=1"; else echo "uefi=0"; fi
+    if [ "$(id -u)" -eq 0 ]; then echo "root=1"; else echo "root=0"; fi
+}
+
+probe_disks() {
+    live=$(get_live_disk)
+    lsblk -dnbP -o NAME,SIZE,MODEL,RM,TYPE 2>/dev/null | while read -r line; do
+        case "$line" in *'TYPE="disk"'*) ;; *) continue ;; esac
+        name=$(echo "$line" | sed -n 's/.*NAME="\([^"]*\)".*/\1/p')
+        case "$name" in loop*|ram*|zram*|sr*|fd*) continue ;; esac
+        if [ -n "$live" ] && [ "$name" = "$live" ]; then
+            echo "$line LIVE=\"1\""
+        else
+            echo "$line LIVE=\"0\""
+        fi
+    done
+}
+
+probe_layout() {
+    lsblk -nP -o NAME,SIZE,FSTYPE,LABEL "/dev/$1" 2>/dev/null
+}
+
+probe_free() {
+    free=$(parted -s "/dev/$1" unit MiB print free 2>/dev/null \
+        | grep "Free Space" \
+        | awk '{gsub(/MiB/,""); print $1, $2, $3}' \
+        | sort -k3 -n \
+        | tail -1)
+    [ -z "$free" ] && return 0
+    echo "$free" | awk '{print $1, $2}'
+}
+
+probe_keymaps() {
+    for f in "$KEYMAP_LIB"/*.bmap; do
+        [ -f "$f" ] || continue
+        basename "$f" .bmap
+    done
+}
+
+# ---------------------------------------------------------------- install
+
+MOUNTED=0
+ESP_EXTERNAL=0
+ESP_PART=""
+ROOT_PART=""
+SWAP_PART=""
+PKG_DONE=0
+PKG_TOTAL=1
+
+progress() {
+    echo "@progress $1 $2"
+}
+
+# best-effort unmount of everything this script might have mounted, run on any failure after
+# the root mount succeeded: a failed install must leave the machine so that trying again from
+# the app works without anybody unmounting things by hand
+cleanup_on_exit() {
+    ec=$?
+    if [ "$ec" -ne 0 ]; then
+        echo "@error install failed (exit $ec), see the log above"
+        if [ "$MOUNTED" -eq 1 ]; then
+            umount "$MOUNT_POINT/sys/firmware/efi/efivars" 2>/dev/null
+            umount "$MOUNT_POINT/sys" 2>/dev/null
+            umount "$MOUNT_POINT/proc" 2>/dev/null
+            umount "$MOUNT_POINT/dev/pts" 2>/dev/null
+            umount "$MOUNT_POINT/dev" 2>/dev/null
+            [ "$ESP_EXTERNAL" = "0" ] && umount "$MOUNT_POINT/boot/efi" 2>/dev/null
+            umount "$MOUNT_POINT" 2>/dev/null
+            [ "$KI_SWAP_MIB" -gt 0 ] && [ -n "$SWAP_PART" ] && swapoff "$SWAP_PART" 2>/dev/null
+        fi
+    fi
+}
+
+part_prefix() {
+    case "$1" in
+        *[0-9]) echo "${1}p" ;;
+        *)      echo "$1" ;;
+    esac
+}
+
+# retried a few times: one flaky connection blip used to throw away a disk that was already
+# partitioned and a base system that was already copied
+flux_pkg() {
+    pkg="$1"
+    i=0
+    while [ "$i" -lt 3 ]; do
+        if chroot "$MOUNT_POINT" flux install -y "$pkg"; then
+            PKG_DONE=$((PKG_DONE + 1))
+            progress $((30 + 60 * PKG_DONE / PKG_TOTAL)) "installing $pkg"
+            return 0
+        fi
+        i=$((i + 1))
+        [ "$i" -lt 3 ] && echo "flux install $pkg failed, retrying ($i/3)"
+        sleep 2
+    done
+    echo "failed to install $pkg after 3 attempts"
+    exit 1
+}
+
+find_esp() {
+    esp_num=$(parted -s "$TARGET_DISK" print | awk '/esp/{print $1}' | head -1)
+    if [ -n "$esp_num" ]; then
+        ESP_PART="$(part_prefix "$TARGET_DISK")${esp_num}"
+        return
+    fi
+    short=$(basename "$TARGET_DISK")
+    for d in $(lsblk -d -o NAME --noheadings); do
+        [ "$d" = "$short" ] && continue
+        esp_num=$(parted -s "/dev/$d" print 2>/dev/null | awk '/esp/{print $1}' | head -1)
+        if [ -n "$esp_num" ]; then
+            ESP_EXTERNAL=1
+            ESP_PART="$(part_prefix "/dev/$d")${esp_num}"
+            return
+        fi
+    done
+    echo "no EFI System Partition found on this disk or any other"
+    exit 1
+}
+
+write_free_space() {
+    last=$(parted -s "$TARGET_DISK" print | awk '/^ [0-9]/{print $1}' | sort -n | tail -1)
+    p=$(part_prefix "$TARGET_DISK")
+    if [ "$KI_SWAP_MIB" -gt 0 ]; then
+        parted -s "$TARGET_DISK" mkpart swap linux-swap "${KI_FREE_START}MiB" "$((KI_FREE_START + KI_SWAP_MIB))MiB"
+        SWAP_PART="${p}$((last + 1))"
+        parted -s "$TARGET_DISK" mkpart root ext4 "$((KI_FREE_START + KI_SWAP_MIB))MiB" "${KI_FREE_END}MiB"
+        ROOT_PART="${p}$((last + 2))"
+    else
+        parted -s "$TARGET_DISK" mkpart root ext4 "${KI_FREE_START}MiB" "${KI_FREE_END}MiB"
+        ROOT_PART="${p}$((last + 1))"
+    fi
+    find_esp
+}
+
+write_whole_disk() {
+    p=$(part_prefix "$TARGET_DISK")
+    parted -s "$TARGET_DISK" mklabel gpt
+    parted -s "$TARGET_DISK" mkpart ESP fat32 1MiB 513MiB
+    parted -s "$TARGET_DISK" set 1 esp on
+    ESP_PART="${p}1"
+    if [ "$KI_SWAP_MIB" -gt 0 ]; then
+        parted -s "$TARGET_DISK" mkpart swap linux-swap 513MiB "$((513 + KI_SWAP_MIB))MiB"
+        parted -s "$TARGET_DISK" mkpart root ext4 "$((513 + KI_SWAP_MIB))MiB" 100%
+        SWAP_PART="${p}2"
+        ROOT_PART="${p}3"
+    else
+        parted -s "$TARGET_DISK" mkpart root ext4 513MiB 100%
+        ROOT_PART="${p}2"
+    fi
+}
+
+format_partitions() {
+    # parted returns before the kernel/udev created the new nodes (NVMe especially): without
+    # this wait mkfs races ahead and fails on a partition that is about to exist
+    partprobe "$TARGET_DISK" 2>/dev/null || true
+    udevadm settle 2>/dev/null || true
+    for part in "$ESP_PART" "$ROOT_PART" "$SWAP_PART"; do
+        [ -z "$part" ] && continue
+        i=0
+        while [ ! -b "$part" ] && [ "$i" -lt 15 ]; do
+            sleep 1
+            i=$((i + 1))
+        done
+        if [ ! -b "$part" ]; then
+            echo "$part never appeared after partitioning"
+            exit 1
+        fi
+    done
+    [ "$KI_MODE" = "whole" ] && mkfs.fat -F 32 "$ESP_PART"
+    mkfs.ext4 -F "$ROOT_PART"
+    [ "$KI_SWAP_MIB" -gt 0 ] && mkswap "$SWAP_PART"
+    return 0
+}
+
+mount_partitions() {
+    mkdir -p "$MOUNT_POINT"
+    mount "$ROOT_PART" "$MOUNT_POINT"
+    # as soon as root is mounted: a failure on the next lines still needs the trap to undo it
+    MOUNTED=1
+    mkdir -p "$MOUNT_POINT/boot/efi"
+    mount "$ESP_PART" "$MOUNT_POINT/boot/efi"
+    [ "$KI_SWAP_MIB" -gt 0 ] && swapon "$SWAP_PART"
+    return 0
+}
+
+copy_base() {
+    tar -xJpf "$TARBALL" -C "$MOUNT_POINT" \
+        --exclude=./tmp --exclude=./proc --exclude=./sys --exclude=./dev \
+        --exclude=./mnt --exclude=./run \
+        --exclude=./var/cache/flux --exclude=./var/lib/flux/installed
+    mkdir -p "$MOUNT_POINT/tmp" "$MOUNT_POINT/proc" "$MOUNT_POINT/sys" "$MOUNT_POINT/dev" \
+        "$MOUNT_POINT/mnt" "$MOUNT_POINT/run" "$MOUNT_POINT/var/cache/flux" "$MOUNT_POINT/var/lib/flux"
+    mkdir -p "$MOUNT_POINT/var/lib/NetworkManager"
+    chmod 755 "$MOUNT_POINT/var/lib/NetworkManager"
+    chmod 1777 "$MOUNT_POINT/tmp"
+    chown root:root "$MOUNT_POINT/var/empty"
+    echo "$KI_TIER" > "$MOUNT_POINT/etc/kira-tier"
+}
+
+# the keyfile plugin stores connections as plain files: carry over what was set up during the
+# live session (wifi) so the installed system does not come up offline
+copy_network_config() {
+    if [ -d /etc/NetworkManager/system-connections ] && \
+       [ -n "$(ls -A /etc/NetworkManager/system-connections 2>/dev/null)" ]; then
+        mkdir -p "$MOUNT_POINT/etc/NetworkManager/system-connections"
+        cp -a /etc/NetworkManager/system-connections/. "$MOUNT_POINT/etc/NetworkManager/system-connections/"
+        chown -R root:root "$MOUNT_POINT/etc/NetworkManager/system-connections"
+        chmod 600 "$MOUNT_POINT"/etc/NetworkManager/system-connections/*
+    fi
+}
+
+copy_kernel() {
+    kv=$(awk '{print $3}' /proc/version)
+    cp "$KERNEL_IMAGE" "$MOUNT_POINT/boot/vmlinuz-$kv"
+    cp "$INITRAMFS_IMAGE" "$MOUNT_POINT/boot/initrd.img-$kv"
+}
+
+write_fstab() {
+    cat > "$MOUNT_POINT/etc/fstab" << EOF
+# Kira Linux fstab
+UUID=$(blkid_uuid "$ROOT_PART")  /           ext4    defaults    0 1
+UUID=$(blkid_uuid "$ESP_PART")   /boot/efi   vfat    defaults    0 2
+EOF
+    if [ "$KI_SWAP_MIB" -gt 0 ]; then
+        echo "UUID=$(blkid_uuid "$SWAP_PART")  none  swap  sw  0 0" >> "$MOUNT_POINT/etc/fstab"
+    fi
+}
+
+chroot_bind() {
+    mount --bind /dev "$MOUNT_POINT/dev"
+    mount --bind /proc "$MOUNT_POINT/proc"
+    mount --bind /sys "$MOUNT_POINT/sys"
+    mount --bind /sys/firmware/efi/efivars "$MOUNT_POINT/sys/firmware/efi/efivars"
+    cp /etc/resolv.conf "$MOUNT_POINT/etc/resolv.conf"
+}
+
+chroot_unbind() {
+    umount "$MOUNT_POINT/sys/firmware/efi/efivars"
+    umount "$MOUNT_POINT/sys"
+    umount "$MOUNT_POINT/proc"
+    umount "$MOUNT_POINT/dev"
+}
+
+create_accounts() {
+    echo "root:$KI_ROOT_PASS" | chroot "$MOUNT_POINT" /usr/sbin/chpasswd
+    chroot "$MOUNT_POINT" /usr/sbin/useradd -m -s /bin/zsh -G wheel,video,input,audio "$KI_USERNAME"
+    echo "$KI_USERNAME:$KI_USER_PASS" | chroot "$MOUNT_POINT" /usr/sbin/chpasswd
+}
+
+apply_tier_config() {
+    if [ "$KI_TIER" = "desktop-sleex" ]; then
+        for d in "$MOUNT_POINT/root" "$MOUNT_POINT/home/$KI_USERNAME"; do
+            mkdir -p "$d/.config/kira-desktop"
+            echo "sleex" > "$d/.config/kira-desktop/active-de"
+            echo "kira-default" > "$d/.config/kira-desktop/current-theme"
+        done
+    fi
+}
+
+# the desktop packages of the chosen system; nothing for a server
+tier_packages() {
+    case "$KI_TIER" in
+        desktop-sleex)    echo "$PACKAGES_SLEEX" ;;
+        desktop-the-line) echo "$PACKAGES_THE_LINE" ;;
+    esac
+}
+
+pci_has() {
+    # $1 vendor, $2 class glob
+    for d in /sys/bus/pci/devices/*; do
+        [ "$(cat "$d/vendor" 2>/dev/null)" = "$1" ] || continue
+        case "$(cat "$d/class" 2>/dev/null)" in $2) return 0 ;; esac
+    done
+    return 1
+}
+
+install_packages() {
+    for pkg in $PACKAGES; do flux_pkg "$pkg"; done
+    # Alpine's sudo ships this rule commented out: without it wheel grants nothing
+    sed -i 's/^# %wheel ALL=(ALL:ALL) ALL$/%wheel ALL=(ALL:ALL) ALL/' "$MOUNT_POINT/etc/sudoers"
+    for pkg in $(tier_packages); do flux_pkg "$pkg"; done
+    pci_has 0x8086 "0x028*" && flux_pkg linux-firmware-intel
+    pci_has 0x10de "0x03*" && flux_pkg linux-firmware-nvidia
+    return 0
+}
+
+# grub-probe sometimes cannot resolve the root UUID inside the chroot and grub-mkconfig falls
+# back to a raw /dev path, which breaks when NVMe enumeration order shifts
+fix_grub_root_uuid() {
+    sed -i "s#root=$ROOT_PART#root=UUID=$(blkid_uuid "$ROOT_PART")#" "$MOUNT_POINT/boot/grub/grub.cfg"
+}
+
+# Alpine's grub package overwrites the Kira-branded /etc/default/grub kira-base seeds, so the
+# branding has to be re-applied right before grub-mkconfig
+fix_grub_branding() {
+    if grep -q '^GRUB_DISTRIBUTOR=' "$MOUNT_POINT/etc/default/grub"; then
+        sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Kira Linux"/' "$MOUNT_POINT/etc/default/grub"
+    else
+        echo 'GRUB_DISTRIBUTOR="Kira Linux"' >> "$MOUNT_POINT/etc/default/grub"
+    fi
+    if ! grep -q "Reboot Computer" "$MOUNT_POINT/etc/grub.d/40_custom" 2>/dev/null; then
+        cat >> "$MOUNT_POINT/etc/grub.d/40_custom" << 'EOF'
+
+menuentry 'Reboot Computer' {
+    reboot
+}
+menuentry 'Shutdown Computer' {
+    halt
+}
+EOF
+    fi
+}
+
+install_bootloader() {
+    # an ESP on another disk is not mounted by mount_partitions' siblings: mount it here
+    [ "$ESP_EXTERNAL" = "1" ] && mount "$ESP_PART" "$MOUNT_POINT/boot/efi"
+    chroot "$MOUNT_POINT" grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="$KI_HOSTNAME"
+    fix_grub_branding
+    chroot "$MOUNT_POINT" grub-mkconfig -o /boot/grub/grub.cfg
+    fix_grub_root_uuid
+    [ "$ESP_EXTERNAL" = "1" ] && umount "$MOUNT_POINT/boot/efi"
+    return 0
+}
+
+unmount_all() {
+    if [ "$ESP_EXTERNAL" = "0" ] || mountpoint -q "$MOUNT_POINT/boot/efi"; then
+        umount "$MOUNT_POINT/boot/efi"
+    fi
+    umount "$MOUNT_POINT"
+    [ "$KI_SWAP_MIB" -gt 0 ] && swapoff "$SWAP_PART"
+    # nothing left for the trap to undo
+    MOUNTED=0
+    return 0
+}
+
+dry_install() {
+    for step in \
+        "4 partitioning /dev/$KI_DISK" \
+        "10 formatting" \
+        "14 mounting" \
+        "30 copying the system" \
+        "34 writing the configuration" \
+        "50 installing packages" \
+        "70 installing packages" \
+        "90 installing packages" \
+        "94 setting the timezone" \
+        "98 installing the bootloader" \
+        "100 unmounting"; do
+        # shellcheck disable=SC2086
+        set -- $step
+        pct=$1; shift
+        progress "$pct" "$*"
+        echo "(dry run) $*"
+        sleep 1
+    done
+    echo "@done"
+}
+
+do_install() {
+    exec 2>&1
+    if [ "$KI_DRY" = "1" ]; then
+        dry_install
+        return 0
+    fi
+    set -e
+    trap cleanup_on_exit EXIT
+
+    [ "$(id -u)" -eq 0 ] || { echo "@error not running as root"; exit 1; }
+    [ -d /sys/firmware/efi ] || { echo "@error not booted in uefi mode"; exit 1; }
+    TARGET_DISK="/dev/$KI_DISK"
+    [ -b "$TARGET_DISK" ] || { echo "@error $TARGET_DISK is not a block device"; exit 1; }
+
+    PKG_TOTAL=$((3 + $(echo "$PACKAGES" | wc -w)))
+    PKG_TOTAL=$((PKG_TOTAL + $(tier_packages | wc -w)))
+    pci_has 0x8086 "0x028*" && PKG_TOTAL=$((PKG_TOTAL + 1))
+    pci_has 0x10de "0x03*" && PKG_TOTAL=$((PKG_TOTAL + 1))
+
+    progress 2 "partitioning $TARGET_DISK"
+    if [ "$KI_MODE" = "whole" ]; then write_whole_disk; else write_free_space; fi
+    progress 6 "formatting"
+    format_partitions
+    progress 9 "mounting"
+    mount_partitions
+
+    progress 12 "copying the system"
+    copy_base
+    copy_network_config
+    copy_kernel
+    write_fstab
+    echo "$KI_HOSTNAME" > "$MOUNT_POINT/etc/hostname"
+    chroot_bind
+    progress 28 "preparing the package manager"
+
+    chroot "$MOUNT_POINT" flux check
+    # flux's recipe sync falls back to a tarball download only the first time git is missing;
+    # every later sync runs "git pull", so git goes in first
+    flux_pkg git
+    # creating accounts needs the real useradd/chpasswd (shadow), and useradd -m copies /etc/skel,
+    # which kira-branding populates: both land before the accounts, the rest of the list after
+    flux_pkg shadow
+    flux_pkg kira-branding
+    # kira-branding seeded us.bmap as the active layout: swap it for the chosen one
+    if [ "$KI_KEYMAP" != "us" ] && [ -f "$MOUNT_POINT/usr/share/kira-keymaps/$KI_KEYMAP.bmap" ]; then
+        rm -f "$MOUNT_POINT/etc/keymaps"/*.bmap
+        cp "$MOUNT_POINT/usr/share/kira-keymaps/$KI_KEYMAP.bmap" "$MOUNT_POINT/etc/keymaps/"
+    fi
+    progress 30 "creating the accounts"
+    create_accounts
+    apply_tier_config
+    install_packages
+
+    progress 92 "setting the timezone"
+    ln -sf "/usr/share/zoneinfo/$KI_TZ" "$MOUNT_POINT/etc/localtime"
+    progress 95 "installing the bootloader"
+    install_bootloader
+    progress 99 "unmounting"
+    chroot_unbind
+    unmount_all
+    progress 100 "done"
+    echo "@done"
+}
+
+case "$1" in
+    check)   probe_check ;;
+    disks)   probe_disks ;;
+    layout)  probe_layout "$2" ;;
+    free)    probe_free "$2" ;;
+    keymaps) probe_keymaps ;;
+    install) do_install ;;
+    *) echo "usage: $0 check|disks|layout DISK|free DISK|keymaps|install" >&2; exit 2 ;;
+esac

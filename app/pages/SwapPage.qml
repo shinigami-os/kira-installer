@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: "some *swap*?"
-    sub: "disk space the system can borrow as memory. optional."
+    title: "Some *swap*?"
+    sub: "Disk space the system can borrow as memory. Optional."
     hint: "a letter picks   → go on   ← back"
 
     readonly property var sizes: ({ n: 0, "2": 2048, "4": 4096, "8": 8192, "6": 16384 })

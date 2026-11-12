@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: "who is *using* it?"
-    sub: "your account. you get sudo through the wheel group."
+    title: "Who is *using* it?"
+    sub: "Your account. You get sudo through the wheel group."
     typing: true
     hint: "enter go on   alt+← back   esc leave"
     readonly property bool valid: /^[a-z_][a-z0-9_-]*$/.test(field.text)

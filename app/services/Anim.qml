@@ -3,7 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// The whole motion system (style guide §6): one curve, a few durations, all through d().
+// The whole motion system, The Line's: one curve, a few durations, all through d().
 // KIRA_REDUCE_MOTION=1 makes every duration 1 ms.
 Singleton {
     readonly property bool reduce: Quickshell.env("KIRA_REDUCE_MOTION") === "1"

@@ -6,8 +6,8 @@ Rectangle {
     property string label
     property bool lit: false
 
-    width: Math.max(Theme.u(18), cap.implicitWidth + Theme.u(10))
-    height: Theme.u(18)
+    width: Math.max(Theme.u(24), cap.implicitWidth + Theme.u(12))
+    height: Theme.u(24)
     color: "transparent"
     border.width: 1
     border.color: lit ? Theme.accent : Theme.borderStrong
@@ -18,6 +18,6 @@ Rectangle {
         text: parent.label
         color: parent.lit ? Theme.text : Theme.muted
         font.family: Theme.fontMono
-        font.pixelSize: Theme.u(11)
+        font.pixelSize: Theme.u(13)
     }
 }

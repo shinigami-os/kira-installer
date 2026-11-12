@@ -1,7 +1,7 @@
 import QtQuick
 import qs.services
 
-// The dialog of style guide §6.3: the screen dims, a line draws itself across the middle from both edges, the box opens
+// A dialog grown from a line: the screen dims, a line draws itself across the middle from both edges, the box opens
 // on it. Closing runs it backwards, content first.
 FocusScope {
     id: dlg
@@ -50,8 +50,8 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.bg
-        opacity: 0.85 * dlg.line
+        color: "#000000"
+        opacity: 0.8 * dlg.line
     }
 
     // the line, from both edges to the middle
@@ -71,11 +71,11 @@ FocusScope {
     }
 
     Rectangle {
-        width: Theme.u(460)
-        height: Theme.u(120) * dlg.box
+        width: Theme.u(500)
+        height: Theme.u(140) * dlg.box
         x: (dlg.width - width) / 2
         y: Math.round(dlg.height / 2) - height / 2
-        color: Theme.surface
+        color: Theme.panel
         border.width: 1
         border.color: Theme.border
         clip: true
@@ -89,23 +89,23 @@ FocusScope {
                 text: dlg.question
                 color: Theme.text
                 font.family: Theme.fontUi
-                font.pixelSize: Theme.u(20)
+                font.pixelSize: Theme.u(24)
                 font.weight: Font.Medium
             }
             Text {
                 text: "nothing has been written."
                 color: Theme.muted
                 font.family: Theme.fontMono
-                font.pixelSize: Theme.u(11)
+                font.pixelSize: Theme.u(13)
             }
             Item { width: 1; height: Theme.u(8) }
             Row {
                 spacing: Theme.u(8)
                 KeyCap { label: "y"; lit: true }
-                Text { text: dlg.yes; color: Theme.muted; font.family: Theme.fontMono; font.pixelSize: Theme.u(11); anchors.verticalCenter: parent.verticalCenter }
+                Text { text: dlg.yes; color: Theme.muted; font.family: Theme.fontMono; font.pixelSize: Theme.u(13); anchors.verticalCenter: parent.verticalCenter }
                 Item { width: Theme.u(16); height: 1 }
                 KeyCap { label: "n" }
-                Text { text: "stay"; color: Theme.muted; font.family: Theme.fontMono; font.pixelSize: Theme.u(11); anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "stay"; color: Theme.muted; font.family: Theme.fontMono; font.pixelSize: Theme.u(13); anchors.verticalCenter: parent.verticalCenter }
             }
         }
     }

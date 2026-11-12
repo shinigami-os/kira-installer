@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: "which *keyboard* is this?"
-    sub: "it applies right now, and to the installed system."
+    title: "Which *keyboard* is this?"
+    sub: "It applies right now, and to the installed system."
     hint: "↑↓ move   a letter jumps   → go on   ← back"
 
     readonly property var names: Installer.keymaps

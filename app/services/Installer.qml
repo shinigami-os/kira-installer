@@ -15,6 +15,12 @@ Singleton {
 
     // ---- the steps: one tick each on the ruler ----
     readonly property var steps: ["welcome", "keymap", "network", "disk", "mode", "swap", "hostname", "username", "password", "root", "timezone", "tier", "review", "install", "done"]
+    // what each step is called on the spine
+    readonly property var names: ({
+        welcome: "Welcome", keymap: "Keyboard", network: "Network", disk: "Disk", mode: "How much of it", swap: "Swap",
+        hostname: "Computer name", username: "You", password: "Password", root: "Root", timezone: "Time zone",
+        tier: "System", review: "Review", install: "Install", done: "Done"
+    })
     property int index: 0
     readonly property string current: steps[index]
     // From the install on there is no way back: the disk has been written to.

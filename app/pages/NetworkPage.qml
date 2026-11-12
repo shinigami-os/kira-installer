@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: Installer.online ? "you are *online*." : "get *online*."
-    sub: Installer.online ? "packages will come from the network." : "the packages come from the network. skip it if you know better."
+    title: Installer.online ? "You are *online*." : "Get *online*."
+    sub: Installer.online ? "The packages will come from the network." : "The packages come from the network. Skip it if you know better."
     hint: pw.visible ? "enter connect   esc back to the list" : "↑↓ move   enter connect   r rescan   → go on   ← back"
     typing: pw.visible
 
@@ -62,16 +62,16 @@ Page {
 
         Text {
             visible: Installer.wifi.length === 0
-            text: Installer.wifiBusy ? "looking for networks…" : "no wifi networks. a cable works without asking."
-            color: Theme.muted
-            font.family: Theme.fontMono
-            font.pixelSize: Theme.u(12)
+            text: Installer.wifiBusy ? "Looking for networks…" : "No Wi-Fi network found. A cable works without asking."
+            color: Theme.read
+            font.family: Theme.fontUi
+            font.pixelSize: Theme.u(15)
         }
 
         ListView {
             id: list
             width: parent.width
-            height: Math.min(contentHeight, page.height - Theme.u(330))
+            height: Math.min(contentHeight, parent.parent.height - Theme.u(120))
             clip: true
             model: Installer.wifi
             boundsBehavior: Flickable.StopAtBounds
@@ -95,7 +95,7 @@ Page {
             id: pw
             visible: page.asking
             width: parent.width
-            height: Theme.u(44)
+            height: Theme.u(52)
             Field {
                 id: pwField
                 secret: true
@@ -113,7 +113,7 @@ Page {
             visible: text !== ""
             color: Installer.wifiBusy ? Theme.muted : Theme.error
             font.family: Theme.fontMono
-            font.pixelSize: Theme.u(12)
+            font.pixelSize: Theme.u(13)
         }
     }
 }

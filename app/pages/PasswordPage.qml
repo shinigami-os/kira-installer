@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: "a *password* for " + Installer.username + "."
-    sub: "typed as ticks. nobody is looking, but still."
+    title: "A *password* for " + Installer.username + "."
+    sub: "Typed as ticks. Nobody is looking, but still."
     typing: true
     hint: "enter next field   alt+← back   esc leave"
     readonly property bool match: first.text === second.text

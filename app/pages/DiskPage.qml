@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: "which *disk*?"
-    sub: "kira goes on one disk. the next screen says how much of it."
+    title: "Which *disk*?"
+    sub: "Kira goes on one disk. The next step says how much of it."
     hint: "↑↓ move   → go on   ← back"
     ready: Installer.disk !== ""
     notice: Installer.disks.length === 0 ? "no disk found." : ""
@@ -36,7 +36,7 @@ Page {
 
     Column {
         width: parent.width
-        spacing: Theme.u(18)
+        spacing: Theme.u(28)
 
         Column {
             width: parent.width
@@ -45,7 +45,8 @@ Page {
                 ListRow {
                     required property var modelData
                     required property int index
-                    label: "/dev/" + modelData.name + (modelData.model ? "   " + modelData.model : "")
+                    label: "/dev/" + modelData.name
+                    detail: modelData.model
                     sub: modelData.live ? "the medium you booted from" : Installer.human(modelData.bytes)
                     subColor: modelData.live ? Theme.error : Theme.muted
                     disabled: modelData.live
@@ -61,21 +62,23 @@ Page {
             visible: Installer.layout.length > 0
             spacing: 2
             Text {
+                bottomPadding: Theme.u(6)
                 text: "ON IT NOW"
                 color: Theme.muted
                 font.family: Theme.fontUi
-                font.pixelSize: Theme.u(10)
+                font.pixelSize: Theme.u(11)
                 font.weight: Font.DemiBold
-                font.letterSpacing: 0.8
+                font.letterSpacing: Theme.u(2)
             }
             Repeater {
                 model: Installer.layout.slice(0, 8)
                 Text {
                     required property var modelData
                     text: modelData.name.padEnd(18) + modelData.size.padEnd(10) + modelData.fs + (modelData.label ? "  " + modelData.label : "")
-                    color: Theme.muted
+                    leftPadding: Theme.u(18)
+                    color: Theme.read
                     font.family: Theme.fontMono
-                    font.pixelSize: Theme.u(11)
+                    font.pixelSize: Theme.u(13)
                 }
             }
         }

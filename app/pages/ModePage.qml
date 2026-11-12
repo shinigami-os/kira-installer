@@ -4,11 +4,11 @@ import qs.services
 
 Page {
     id: page
-    title: "how much of it?"
-    sub: "/dev/" + Installer.disk
+    title: "How much *of it*?"
+    sub: "/dev/" + Installer.disk + (Installer.diskModel ? ", " + Installer.diskModel : "") + ", " + Installer.human(Installer.diskBytes)
     hint: "w whole   f free space   → go on   ← back"
     ready: Installer.mode !== ""
-    notice: !Installer.wholeOk && !Installer.freeOk ? "this disk is too small: kira needs at least 15 GiB." : ""
+    notice: !Installer.wholeOk && !Installer.freeOk ? "this disk is too small: Kira needs at least 15 GiB." : ""
 
     Choice {
         id: choice
@@ -32,12 +32,13 @@ Page {
     }
 
     Text {
-        y: Theme.u(100)
+        y: choice.height + Theme.u(24)
+        leftPadding: Theme.u(18)
         width: parent.width
-        text: Installer.mode === "whole" ? "a fresh gpt table: a 512 MiB boot partition, then the system. every partition on this disk goes." : (Installer.mode === "free" ? "a new partition in the largest free region (" + Installer.freeStart + " – " + Installer.freeEnd + " MiB). the boot partition already there is reused. nothing else is touched." : "")
+        text: Installer.mode === "whole" ? "A fresh GPT table: a 512 MiB boot partition, then the system. Every partition on this disk goes." : (Installer.mode === "free" ? "A new partition in the largest free region (" + Installer.freeStart + " – " + Installer.freeEnd + " MiB). The boot partition already there is reused. Nothing else is touched." : "")
         wrapMode: Text.WordWrap
-        color: Theme.muted
-        font.family: Theme.fontMono
-        font.pixelSize: Theme.u(12)
+        color: Theme.read
+        font.family: Theme.fontUi
+        font.pixelSize: Theme.u(15)
     }
 }

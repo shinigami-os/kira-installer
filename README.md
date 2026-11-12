@@ -24,8 +24,8 @@ app/                         the installer
   shell.qml                  window, ruler, hints, keys, power-off dialog
   launch.sh                  what cage runs on the live medium
   backend/kira-install-backend   probes, and the real install (the app never runs a pipeline itself)
-  services/                  Theme, Anim (the style guide tokens), Installer (state and processes)
-  components/                Page, ListRow, Choice, Field, HoldButton, Ruler, ...
+  services/                  Theme, Anim (The Line's colours and motion), Installer (state and processes)
+  components/                Page, Spine, ListRow, Choice, Field, HoldButton, ...
   pages/                     one screen per step
 iso/sv/kira-installer/       the runit service that starts cage and the app on tty1
 Makefile                     builds the ISO

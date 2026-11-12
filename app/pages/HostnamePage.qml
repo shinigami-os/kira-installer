@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: "what is this machine *called*?"
-    sub: "letters, numbers and hyphens. it can change later, in a plain file."
+    title: "What is this computer *called*?"
+    sub: "Letters, numbers and hyphens. It can change later, in a plain file."
     typing: true
     hint: "enter go on   alt+← back   esc leave"
     readonly property bool valid: /^[a-zA-Z0-9-]+$/.test(field.text)

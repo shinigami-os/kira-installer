@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: Installer.failure !== "" ? "that did not *work*." : "installing *kira*."
-    sub: Installer.failure !== "" ? Installer.failure : "this takes a while. the kettle is a good idea."
+    title: Installer.failure !== "" ? "That did not *work*." : "Installing *Kira*."
+    sub: Installer.failure !== "" ? Installer.failure : "This takes a while. The kettle is a good idea."
     hint: Installer.failure !== "" ? "r try again   q quit" : "no way back from here"
     ready: false
 
@@ -24,12 +24,12 @@ Page {
 
     Column {
         width: parent.width
-        spacing: Theme.u(14)
+        spacing: Theme.u(20)
 
         // a line filling from the left, with a tick for every tenth
         Item {
             width: parent.width
-            height: Theme.u(24)
+            height: Theme.u(30)
             Rectangle {
                 y: parent.height - 1
                 width: parent.width
@@ -37,9 +37,9 @@ Page {
                 color: Theme.borderStrong
             }
             Rectangle {
-                y: parent.height - 1
+                y: parent.height - 2
                 width: parent.width * Installer.percent / 100
-                height: 1
+                height: 3
                 color: Installer.failure !== "" ? Theme.error : Theme.accent
                 Behavior on width {
                     NumberAnimation { duration: Anim.panel; easing.type: Anim.easing }
@@ -52,7 +52,7 @@ Page {
                     x: Math.round(parent.width * (index + 1) / 10) - 1
                     y: parent.height - 1 - height
                     width: 1
-                    height: Theme.u(8)
+                    height: Theme.u(10)
                     color: Installer.percent >= (index + 1) * 10 ? (Installer.failure !== "" ? Theme.error : Theme.accent) : Theme.border
                 }
             }
@@ -62,7 +62,7 @@ Page {
             text: Installer.doing + "  ·  " + Math.round(Installer.percent) + " %"
             color: Theme.text
             font.family: Theme.fontMono
-            font.pixelSize: Theme.u(12)
+            font.pixelSize: Theme.u(15)
         }
 
         Text {
@@ -72,7 +72,7 @@ Page {
             maximumLineCount: 6
             color: Theme.muted
             font.family: Theme.fontMono
-            font.pixelSize: Theme.u(11)
+            font.pixelSize: Theme.u(12)
         }
     }
 }

@@ -1,7 +1,8 @@
 import QtQuick
 import qs.services
 
-// An inline choice: a row of bordered options, a letter under each. The letter picks it; ↑ ↓ move.
+// A choice between a few options, as the settings app's rows: one row each, its name and what it means, its letter
+// as a key cap at the right. The chosen one is lit, with the accent tick. A letter picks it; ↑ ↓ move.
 FocusScope {
     id: choice
 
@@ -10,8 +11,8 @@ FocusScope {
     property string current: ""
     signal picked(string key)
 
-    implicitHeight: Theme.u(72)
     width: parent ? parent.width : 0
+    implicitHeight: list.height
 
     function pick(i) {
         if (i < 0 || i >= options.length || options[i].disabled)
@@ -46,64 +47,73 @@ FocusScope {
         }
     }
 
-    Row {
-        spacing: Theme.u(10)
+    Column {
+        id: list
+        width: parent.width
+
         Repeater {
             model: choice.options
-            delegate: Item {
+
+            Rectangle {
                 id: opt
                 required property var modelData
                 required property int index
                 readonly property bool on: modelData.key === choice.current
-                width: Math.floor((choice.width - Theme.u(10) * (choice.options.length - 1)) / choice.options.length)
-                height: choice.height
+
+                width: list.width
+                height: Theme.u(58)
+                color: opt.on || hover.hovered && !opt.modelData.disabled ? Theme.row : "transparent"
                 opacity: modelData.disabled ? 0.45 : 1
+                Behavior on color {
+                    ColorAnimation { duration: Anim.hover }
+                }
 
                 Rectangle {
-                    width: parent.width
-                    height: Theme.u(48)
-                    color: opt.on ? Theme.accentTint : "transparent"
-                    border.width: 1
-                    border.color: opt.on ? Theme.accent : (hover.hovered && !opt.modelData.disabled ? Theme.borderStrong : Theme.border)
-                    Behavior on color {
-                        ColorAnimation { duration: Anim.base }
+                    width: 2
+                    height: parent.height
+                    color: Theme.accent
+                    opacity: opt.on ? 1 : 0
+                    Behavior on opacity {
+                        NumberAnimation { duration: Anim.base; easing.type: Anim.easing }
                     }
-                    Behavior on border.color {
-                        ColorAnimation { duration: Anim.hover }
-                    }
+                }
 
+                Column {
+                    x: Theme.u(18)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - Theme.u(80)
+                    spacing: Theme.u(3)
                     Text {
-                        x: Theme.u(12)
-                        y: opt.modelData.sub ? parent.height / 2 - height - 1 : (parent.height - height) / 2
-                        width: parent.width - Theme.u(24)
+                        width: parent.width
                         text: opt.modelData.label
                         elide: Text.ElideRight
                         color: Theme.text
                         font.family: Theme.fontUi
-                        font.pixelSize: Theme.u(13)
-                        font.weight: Font.Medium
+                        font.pixelSize: Theme.u(16)
+                        font.weight: opt.on ? Font.Medium : Font.Normal
                     }
                     Text {
-                        x: Theme.u(12)
-                        y: parent.height / 2 + 1
-                        width: parent.width - Theme.u(24)
+                        width: parent.width
                         text: opt.modelData.sub ?? ""
+                        visible: text !== ""
                         elide: Text.ElideRight
-                        color: opt.on ? Theme.text : Theme.muted
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.u(11)
+                        color: opt.on ? Theme.read : Theme.muted
+                        font.family: Theme.fontUi
+                        font.pixelSize: Theme.u(13)
                     }
                 }
 
                 KeyCap {
-                    x: Theme.u(2)
-                    y: Theme.u(54)
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.u(18)
+                    anchors.verticalCenter: parent.verticalCenter
                     label: opt.modelData.key
                     lit: opt.on
                 }
 
                 HoverHandler {
                     id: hover
+                    cursorShape: opt.modelData.disabled ? Qt.ArrowCursor : Qt.PointingHandCursor
                 }
                 TapHandler {
                     onTapped: choice.pick(opt.index)

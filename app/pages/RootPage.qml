@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: "and for *root*?"
-    sub: "the account that can break everything. the same password is fine."
+    title: "And for *root*?"
+    sub: "The account that can break everything. The same password is fine."
     hint: Installer.rootSame ? "s same   d different   → go on   ← back" : "enter next field   alt+← back   esc leave"
     typing: !Installer.rootSame
     readonly property bool match: first.text === second.text
@@ -21,8 +21,8 @@ Page {
             focus: Installer.rootSame
             current: Installer.rootSame ? "s" : "d"
             options: [
-                { key: "s", label: "Same as " + Installer.username, sub: "one password" },
-                { key: "d", label: "A different one", sub: "root only" }
+                { key: "s", label: "Same as " + Installer.username, sub: "One password to remember" },
+                { key: "d", label: "A different one", sub: "Root gets its own" }
             ]
             onPicked: key => {
                 Installer.rootSame = key === "s";

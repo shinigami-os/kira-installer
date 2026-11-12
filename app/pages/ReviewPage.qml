@@ -4,8 +4,9 @@ import qs.services
 
 Page {
     id: page
-    title: Installer.mode === "whole" ? "this will erase */dev/" + Installer.disk + "*." : "this will *add* a partition."
-    sub: Installer.mode === "whole" ? "all of it. every partition on the disk. read the rest first." : "a partition is added in the free space. the others stay as they are."
+    title: Installer.mode === "whole" ? "This will erase */dev/" + Installer.disk + "*." : "This will *add* a partition."
+    sub: Installer.mode === "whole" ? "All of it: every partition on the disk. Read the rest first." : "A partition is added in the free space. The others stay as they are."
+    destructive: Installer.mode === "whole"
     hint: "hold enter to install   ← back   esc leave"
     ready: false
 
@@ -24,21 +25,21 @@ Page {
     }
 
     readonly property var rows: [
-        ["keyboard", Installer.keymap],
-        ["network", Installer.online ? "online" : "offline"],
-        ["disk", "/dev/" + Installer.disk + "  " + Installer.diskModel],
-        ["partitioning", Installer.mode === "whole" ? "erase the whole disk" : "free space, " + Installer.humanMib(Installer.freeMib)],
-        ["swap", Installer.swapMib > 0 ? Installer.swapMib + " MiB" : "none"],
-        ["hostname", Installer.hostname],
-        ["user", Installer.username],
-        ["root", Installer.rootSame ? "same password" : "its own password"],
-        ["timezone", Installer.timezone],
-        ["system", Installer.tier === "server" ? "server" : (Installer.tier === "desktop-sleex" ? "desktop (sleex)" : "desktop (the line)")]
+        ["Keyboard", Installer.keymap],
+        ["Network", Installer.online ? "online" : "offline"],
+        ["Disk", "/dev/" + Installer.disk + "  " + Installer.diskModel],
+        ["Partitioning", Installer.mode === "whole" ? "erase the whole disk" : "free space, " + Installer.humanMib(Installer.freeMib)],
+        ["Swap", Installer.swapMib > 0 ? Installer.swapMib + " MiB" : "none"],
+        ["Computer name", Installer.hostname],
+        ["User", Installer.username],
+        ["Root", Installer.rootSame ? "same password" : "its own password"],
+        ["Time zone", Installer.timezone],
+        ["System", Installer.tier === "server" ? "Server" : (Installer.tier === "desktop-sleex" ? "Sleex" : "The Line")]
     ]
 
     Column {
         width: parent.width
-        spacing: Theme.u(24)
+        spacing: Theme.u(32)
 
         Column {
             width: parent.width
@@ -47,21 +48,30 @@ Page {
                 Item {
                     required property var modelData
                     width: parent.width
-                    height: Theme.u(24)
+                    height: Theme.u(34)
                     Text {
+                        x: Theme.u(18)
+                        anchors.verticalCenter: parent.verticalCenter
                         text: modelData[0]
                         color: Theme.muted
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.u(11)
+                        font.family: Theme.fontUi
+                        font.pixelSize: Theme.u(15)
                     }
                     Text {
-                        x: Theme.u(120)
+                        x: Theme.u(200)
+                        anchors.verticalCenter: parent.verticalCenter
                         width: parent.width - x
                         text: modelData[1]
                         elide: Text.ElideRight
                         color: Theme.text
                         font.family: Theme.fontMono
-                        font.pixelSize: Theme.u(12)
+                        font.pixelSize: Theme.u(14)
+                    }
+                    Rectangle {
+                        y: parent.height - 1
+                        width: parent.width
+                        height: 1
+                        color: Theme.border
                     }
                 }
             }

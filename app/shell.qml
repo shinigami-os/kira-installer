@@ -6,7 +6,7 @@ import Quickshell
 import qs.components
 import qs.services
 
-// The Kira Linux installer, a Quickshell app styled after The Line (THE_LINE_STYLE_GUIDE.md).
+// The Kira Linux installer, a Quickshell app laid out like The Line's settings app.
 // Launched by launch.sh, inside cage, on the live medium: no session, no login, nothing to start by hand.
 // KI_DRY=1 tries the whole thing in a window without writing to any disk. KIRA_REDUCE_MOTION=1 turns the motion off.
 //
@@ -59,28 +59,85 @@ ShellRoot {
                 }
             }
 
-            Loader {
-                id: loader
-                anchors.fill: parent
-                source: stage.pageFile(Installer.current)
-                onLoaded: item.forceActiveFocus()
+            // the header: the logo, the app's name, and what kind of run this is; the line under it
+            Item {
+                id: header
+                width: parent.width
+                height: Theme.u(56)
+
+                Image {
+                    x: Theme.u(28)
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: Theme.u(24)
+                    fillMode: Image.PreserveAspectFit
+                    source: "assets/kira-logo.png"
+                    smooth: true
+                    mipmap: true
+                }
+                Text {
+                    x: Theme.u(62)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "KIRA INSTALLER"
+                    color: Theme.muted
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.u(12)
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: Theme.u(2)
+                }
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.u(28)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: (Installer.checked ? (Installer.uefi ? "uefi" : "bios") : "…") + (Installer.dry ? "  ·  dry run, nothing is written" : "")
+                    color: Installer.dry ? Theme.accentSoft : Theme.faint
+                    font.family: Theme.fontMono
+                    font.pixelSize: Theme.u(12)
+                }
+                Rectangle {
+                    y: parent.height - 1
+                    width: parent.width
+                    height: 1
+                    color: Theme.borderStrong
+                }
             }
 
-            Ruler {
-                x: Theme.u(80)
-                y: parent.height - Theme.u(76)
-                width: parent.width - Theme.u(160)
-                count: Installer.steps.length
-                current: Installer.index
+            Spine {
+                id: spine
+                y: header.height
+                width: Theme.u(260)
+                height: parent.height - header.height
+                reach: panel.x
             }
 
+            // the current step, in its panel
+            Rectangle {
+                id: panel
+                x: spine.width + Theme.u(14)
+                y: header.height + Theme.u(24)
+                width: Math.min(parent.width - x - Theme.u(28), Theme.u(900))
+                height: parent.height - y - Theme.u(64)
+                color: Theme.panel
+                border.width: 1
+                border.color: Theme.border
+
+                Loader {
+                    id: loader
+                    anchors.fill: parent
+                    anchors.margins: Theme.u(40)
+                    anchors.bottomMargin: Theme.u(28)
+                    source: stage.pageFile(Installer.current)
+                    onLoaded: item.forceActiveFocus()
+                }
+            }
+
+            // what the keys do here
             Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: parent.height - Theme.u(44)
+                x: panel.x
+                y: panel.y + panel.height + Theme.u(18)
                 text: stage.page ? stage.page.hint : ""
                 color: Theme.muted
                 font.family: Theme.fontMono
-                font.pixelSize: Theme.u(11)
+                font.pixelSize: Theme.u(12)
             }
 
             LeaveDialog {

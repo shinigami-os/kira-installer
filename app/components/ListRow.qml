@@ -1,11 +1,13 @@
 import QtQuick
 import qs.services
 
-// A list line: 34 px, a name in Raleway, a reading in mono at the right. Selected or hovered: surface2 and a 2 px accent tick.
+// A row, as in the settings app: a name in Raleway, what it is in mono at the right. Selected (or hovered): the row is
+// lit and a 2 px accent tick stands at its left edge.
 Rectangle {
     id: row
 
     property string label
+    property string detail          // a second, quieter part of the name (a disk's model)
     property string sub
     property bool selected: false
     property bool disabled: false
@@ -13,8 +15,8 @@ Rectangle {
     signal clicked
 
     width: parent ? parent.width : 0
-    height: Theme.u(34)
-    color: selected || hover.hovered && !disabled ? Theme.surface2 : "transparent"
+    height: Theme.u(44)
+    color: selected || hover.hovered && !disabled ? Theme.row : "transparent"
     opacity: disabled ? 0.5 : 1
 
     Behavior on color {
@@ -31,30 +33,43 @@ Rectangle {
         }
     }
 
-    Text {
-        x: Theme.u(14)
+    Row {
+        x: Theme.u(18)
         anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - Theme.u(28) - subText.width - Theme.u(12)
-        text: row.label
-        elide: Text.ElideRight
-        color: Theme.text
-        font.family: Theme.fontUi
-        font.pixelSize: Theme.u(13)
-        font.weight: Font.Medium
+        width: parent.width - Theme.u(36) - subText.width - Theme.u(16)
+        spacing: Theme.u(14)
+        clip: true
+
+        Text {
+            text: row.label
+            color: Theme.text
+            font.family: Theme.fontUi
+            font.pixelSize: Theme.u(16)
+            font.weight: row.selected ? Font.Medium : Font.Normal
+        }
+        Text {
+            anchors.baseline: parent.children[0].baseline
+            text: row.detail
+            visible: text !== ""
+            color: Theme.muted
+            font.family: Theme.fontUi
+            font.pixelSize: Theme.u(14)
+        }
     }
     Text {
         id: subText
         anchors.right: parent.right
-        anchors.rightMargin: Theme.u(14)
+        anchors.rightMargin: Theme.u(18)
         anchors.verticalCenter: parent.verticalCenter
         text: row.sub
         color: row.subColor
         font.family: Theme.fontMono
-        font.pixelSize: Theme.u(11)
+        font.pixelSize: Theme.u(13)
     }
 
     HoverHandler {
         id: hover
+        cursorShape: row.disabled ? Qt.ArrowCursor : Qt.PointingHandCursor
     }
     TapHandler {
         onTapped: if (!row.disabled)

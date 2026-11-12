@@ -1,14 +1,15 @@
 # kira-installer / app
 
-The Kira Linux installer, a Quickshell (QML) app styled after The Line (`THE_LINE_STYLE_GUIDE.md`).
+The Kira Linux installer, a Quickshell (QML) app laid out like The Line's settings app: the steps as a numbered
+spine on the left, the current one in its panel.
 It replaces the former shell script, Rust/ratatui and Rust/Slint attempts.
 
 ```
 shell.qml                    window, ruler, hints, keys, leave dialog
 launch.sh                    what the live medium runs (cage + qs -p)
 backend/kira-install-backend probes + the real install (logic of the old install.sh, without prompts)
-services/                    Theme, Anim (style guide tokens), Installer (state + processes)
-components/                  Page, ListRow, Choice, Field, HoldButton, Ruler, ...
+services/                    Theme, Anim (The Line's colours and motion), Installer (state + processes)
+components/                  Page, Spine, ListRow, Choice, Field, HoldButton, ...
 pages/                       one screen per step
 ```
 

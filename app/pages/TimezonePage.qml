@@ -4,8 +4,8 @@ import qs.services
 
 Page {
     id: page
-    title: "where *are* you?"
-    sub: "type to filter, or write a Region/City of your own."
+    title: "Where *are* you?"
+    sub: "Type to filter, or write a Region/City of your own."
     typing: true
     hint: "↑↓ move   enter go on   alt+← back   esc leave"
     ready: current !== ""
@@ -44,15 +44,15 @@ Page {
 
         Text {
             visible: page.shown.length === 0
-            text: page.custom ? "not in the list. " + field.text.trim() + " will be used as typed." : "nothing matches."
-            color: Theme.muted
-            font.family: Theme.fontMono
-            font.pixelSize: Theme.u(12)
+            text: page.custom ? "Not in the list: " + field.text.trim() + " will be used as typed." : "Nothing matches."
+            color: Theme.read
+            font.family: Theme.fontUi
+            font.pixelSize: Theme.u(15)
         }
 
         ListView {
             width: parent.width
-            height: parent.height - Theme.u(60)
+            height: parent.height - Theme.u(64)
             clip: true
             model: page.shown
             currentIndex: page.sel

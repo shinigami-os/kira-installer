@@ -11,8 +11,8 @@ Item {
     property real held: 0     // 0..1
     signal confirmed
 
-    width: Theme.u(420)
-    height: Theme.u(48)
+    width: Theme.u(460)
+    height: Theme.u(56)
 
     function press() {
         if (!clock.running) {
@@ -64,11 +64,13 @@ Item {
         text: btn.label
         color: Theme.error
         font.family: Theme.fontUi
-        font.pixelSize: Theme.u(13)
+        font.pixelSize: Theme.u(16)
         font.weight: Font.Medium
     }
 
-    PointerHandler {
-        onActiveChanged: active ? btn.press() : btn.release()
+    // held with the pointer: pressed starts the clock, letting go before the end drains it
+    TapHandler {
+        gesturePolicy: TapHandler.WithinBounds
+        onPressedChanged: pressed ? btn.press() : btn.release()
     }
 }

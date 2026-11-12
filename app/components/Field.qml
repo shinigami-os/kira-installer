@@ -13,12 +13,12 @@ FocusScope {
     property alias validator: input.validator
     signal accepted
 
-    height: Theme.u(44)
+    height: Theme.u(52)
     width: parent ? parent.width : 0
 
     Rectangle {
         anchors.fill: parent
-        color: "transparent"
+        color: Theme.inset
         border.width: 1
         border.color: field.invalid ? Theme.error : (input.activeFocus ? Theme.accent : Theme.border)
         Behavior on border.color {
@@ -27,19 +27,19 @@ FocusScope {
     }
 
     Text {
-        x: Theme.u(14)
+        x: Theme.u(18)
         anchors.verticalCenter: parent.verticalCenter
         text: field.prompt
         color: Theme.accent
         font.family: Theme.fontMono
-        font.pixelSize: Theme.u(14)
+        font.pixelSize: Theme.u(17)
     }
 
     TextInput {
         id: input
         focus: true
-        x: Theme.u(36)
-        width: parent.width - Theme.u(52)
+        x: Theme.u(44)
+        width: parent.width - Theme.u(62)
         anchors.verticalCenter: parent.verticalCenter
         clip: true
         echoMode: field.secret ? TextInput.Password : TextInput.Normal
@@ -52,7 +52,7 @@ FocusScope {
             color: Theme.accent
         }
         font.family: Theme.fontMono
-        font.pixelSize: Theme.u(14)
+        font.pixelSize: Theme.u(17)
         onAccepted: field.accepted()
 
         Text {
@@ -65,14 +65,14 @@ FocusScope {
 
     Row {
         visible: field.secret
-        x: Theme.u(36)
+        x: Theme.u(44)
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.u(6)
         Repeater {
             model: Math.min(input.text.length, 40)
             Rectangle {
                 width: 2
-                height: Theme.u(12)
+                height: Theme.u(14)
                 color: Theme.accent
             }
         }

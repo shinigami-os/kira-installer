@@ -1,4 +1,5 @@
 import QtQuick
+import TheLine.Ui
 import qs.components
 import qs.services
 

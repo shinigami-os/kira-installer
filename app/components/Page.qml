@@ -1,4 +1,5 @@
 import QtQuick
+import TheLine.Ui
 import qs.services
 
 // A step, inside its panel: the question as the panel's title with the step's number after it ("Disk 04" in the

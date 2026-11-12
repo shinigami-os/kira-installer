@@ -9,7 +9,7 @@ ROOT = /tmp/kira-installer-root
 # graphics drivers, fonts), networking, and the firmware for the screen and the wifi. icu-data-full comes
 # first on purpose: several Qt packages otherwise claim icu-data-en and conflict with it.
 PACKAGES = icu-data-full kira-installer-tools kira-net kira-seat kira-session-bus kira-branding \
-	kira-quickshell cage xkeyboard-config font-raleway kira-ttf-ibm-plex-mono font-dejavu \
+	kira-quickshell kira-the-line-ui cage xkeyboard-config font-raleway kira-ttf-ibm-plex-mono font-dejavu \
 	mesa mesa-egl mesa-gl mesa-gles mesa-dri-gallium linux-firmware-intel linux-firmware-nvidia
 
 # Every way into a shell on the medium: the installer must be the only thing it offers.

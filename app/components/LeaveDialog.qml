@@ -1,4 +1,5 @@
 import QtQuick
+import TheLine.Ui
 import qs.services
 
 // A dialog grown from a line: the screen dims, a line draws itself across the middle from both edges, the box opens

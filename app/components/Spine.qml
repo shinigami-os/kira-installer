@@ -1,4 +1,5 @@
 import QtQuick
+import TheLine.Ui
 import qs.services
 
 // The steps, as the settings app's spine: a number left of a vertical line, a short tick across it, the name.

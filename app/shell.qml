@@ -2,6 +2,7 @@
 //@ pragma Env QT_QUICK_CONTROLS_STYLE=Basic
 
 import QtQuick
+import TheLine.Ui
 import Quickshell
 import qs.components
 import qs.services
@@ -17,7 +18,7 @@ ShellRoot {
     FloatingWindow {
         id: win
         visible: true
-        color: Theme.bg
+        color: Theme.surface
         title: "Kira Linux installer"
         implicitWidth: Quickshell.screens[0]?.width ?? 1280
         implicitHeight: Quickshell.screens[0]?.height ?? 800
@@ -27,10 +28,16 @@ ShellRoot {
             anchors.fill: parent
             focus: true
 
+            // the design language (TheLine.Ui) drawn for this screen's size, in Kira violet
             Binding {
                 target: Theme
                 property: "scale"
                 value: Math.max(0.75, stage.height / 768)
+            }
+            Binding {
+                target: Anim
+                property: "reduce"
+                value: Quickshell.env("KIRA_REDUCE_MOTION") === "1"
             }
 
             Component.onCompleted: Installer.probeAll()

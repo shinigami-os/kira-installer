@@ -11,7 +11,7 @@ Steps, one tick each on the ruler: welcome, keyboard, network, disk, how much of
 
 - **Keyboard and network.** The keymap is written to the installed system. Wi-Fi set up during the session carries over to it.
 - **Disk.** Wipe a whole disk (GPT: a 512 MiB EFI system partition, optional swap, ext4 root) or install into the largest free region of an existing one. The disk the medium booted from is refused. At least 15 GiB is needed.
-- **System.** Pick one: **The Line** (Kira's own desktop), **Sleex** (the AxOS desktop), or **Server** (a shell and nothing else). Another one can be added later with flux.
+- **System.** Pick one: **The Line** (Kira's own desktop), **Sleex** (the AxOS desktop), or **Server** (a shell and nothing else). Another one can be added later with flux. Every system also gets [kokuin](https://github.com/shinigami-os/kokuin-cli), the boot explainer: `kokuin-cli` on a server, plus its window, `kokuin`, on a desktop.
 - **Install.** The base system is copied from the medium, then the packages for the chosen system are installed with flux (retried on a network error), then GRUB for UEFI. A failed install unmounts everything, so trying again from the app just works.
 - **Done.** Reboot or power off. There is no shell to stay in.
 

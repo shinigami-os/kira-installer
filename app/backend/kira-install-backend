@@ -27,8 +27,9 @@ KERNEL_IMAGE="/installer/bzImage"
 INITRAMFS_IMAGE="/installer/initramfs.cpio.gz"
 TARBALL="/installer/kira-base.tar.xz"
 PACKAGES="shadow shadow-login zsh kira-zsh-plugins kira-branding kira-seat kira-login kira-net kira-session-bus zlib flex bison pkgconf kira-basic-tools kira-build-essential os-prober grub grub-efi efivar efibootmgr nano sudo git chrony tzdata"
-PACKAGES_SLEEX="kira-desktop-sleex netsurf git greetd"
-PACKAGES_THE_LINE="kira-the-line kira-desktop-apps git greetd"
+PACKAGES_SERVER="kira-kokuin-cli"
+PACKAGES_SLEEX="kira-desktop-sleex netsurf git greetd kira-kokuin"
+PACKAGES_THE_LINE="kira-the-line kira-desktop-apps git greetd kira-kokuin"
 MIN_MIB=15360
 
 # ---------------------------------------------------------------- probes
@@ -307,9 +308,10 @@ apply_tier_config() {
     fi
 }
 
-# the desktop packages of the chosen system; nothing for a server
+# what the chosen system adds to the common packages: kokuin, the boot explainer, in its CLI form on a server and with its window on a desktop
 tier_packages() {
     case "$KI_TIER" in
+        server)           echo "$PACKAGES_SERVER" ;;
         desktop-sleex)    echo "$PACKAGES_SLEEX" ;;
         desktop-the-line) echo "$PACKAGES_THE_LINE" ;;
     esac

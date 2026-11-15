@@ -48,7 +48,23 @@ ShellRoot {
                 return "pages/" + id.charAt(0).toUpperCase() + id.slice(1) + "Page.qml";
             }
 
+            // The leave dialog is asked to take the keyboard, but the page keeps it for itself whenever it can (a text
+            // field, a list): while the question is up the page is switched off, so the keys come here.
+            function dismissLeave() {
+                Installer.leaving = false;
+                if (stage.page)
+                    stage.page.forceActiveFocus();
+            }
+
             Keys.onPressed: event => {
+                if (Installer.leaving) {
+                    if (event.text === "y")
+                        Installer.powerOff();
+                    else if (event.text === "n" || event.key === Qt.Key_Escape)
+                        stage.dismissLeave();
+                    event.accepted = true;
+                    return;
+                }
                 const p = stage.page;
                 const typing = p && p.typing;
                 const alt = (event.modifiers & Qt.AltModifier) !== 0;
@@ -133,6 +149,7 @@ ShellRoot {
                     anchors.margins: Theme.u(40)
                     anchors.bottomMargin: Theme.u(28)
                     source: stage.pageFile(Installer.current)
+                    enabled: !Installer.leaving
                     onLoaded: item.forceActiveFocus()
                 }
             }
@@ -154,11 +171,7 @@ ShellRoot {
                 question: Installer.dry ? "leave the installer?" : "power off the computer?"
                 yes: Installer.dry ? "leave" : "power off"
                 onConfirmed: Installer.powerOff()
-                onDismissed: {
-                    Installer.leaving = false;
-                    if (stage.page)
-                        stage.page.forceActiveFocus();
-                }
+                onDismissed: stage.dismissLeave()
             }
         }
     }

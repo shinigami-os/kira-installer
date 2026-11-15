@@ -17,6 +17,11 @@ FocusScope {
     property real box: 0
     visible: line > 0
 
+    // An invisible item cannot take the focus, and the dialog only becomes visible once the line starts to draw:
+    // asking for it in onOpenChanged alone left the keys with the page.
+    onVisibleChanged: if (visible && open)
+        forceActiveFocus()
+
     onOpenChanged: {
         opening.stop();
         closing.stop();

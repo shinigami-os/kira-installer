@@ -317,6 +317,16 @@ tier_packages() {
     esac
 }
 
+# Alpine splits wifi firmware by vendor: what this machine's wifi chip needs, found by its PCI vendor
+wifi_firmware() {
+    pci_has 0x8086 "0x028*" && echo "linux-firmware-intel"
+    pci_has 0x10ec "0x028*" && echo "linux-firmware-rtlwifi linux-firmware-rtw88 linux-firmware-rtw89 linux-firmware-rtl_bt"
+    pci_has 0x14c3 "0x028*" && echo "linux-firmware-mediatek"
+    { pci_has 0x168c "0x028*" || pci_has 0x17cb "0x028*"; } && echo "linux-firmware-ath10k linux-firmware-ath11k linux-firmware-ath12k linux-firmware-qca"
+    pci_has 0x14e4 "0x028*" && echo "linux-firmware-brcm linux-firmware-cypress"
+    return 0
+}
+
 pci_has() {
     # $1 vendor, $2 class glob
     for d in /sys/bus/pci/devices/*; do
@@ -331,7 +341,7 @@ install_packages() {
     # Alpine's sudo ships this rule commented out: without it wheel grants nothing
     sed -i 's/^# %wheel ALL=(ALL:ALL) ALL$/%wheel ALL=(ALL:ALL) ALL/' "$MOUNT_POINT/etc/sudoers"
     for pkg in $(tier_packages); do flux_pkg "$pkg"; done
-    pci_has 0x8086 "0x028*" && flux_pkg linux-firmware-intel
+    for pkg in $(wifi_firmware); do flux_pkg "$pkg"; done
     pci_has 0x10de "0x03*" && flux_pkg linux-firmware-nvidia
     return 0
 }
@@ -424,7 +434,7 @@ do_install() {
 
     PKG_TOTAL=$((3 + $(echo "$PACKAGES" | wc -w)))
     PKG_TOTAL=$((PKG_TOTAL + $(tier_packages | wc -w)))
-    pci_has 0x8086 "0x028*" && PKG_TOTAL=$((PKG_TOTAL + 1))
+    PKG_TOTAL=$((PKG_TOTAL + $(wifi_firmware | wc -w)))
     pci_has 0x10de "0x03*" && PKG_TOTAL=$((PKG_TOTAL + 1))
 
     progress 2 "partitioning $TARGET_DISK"
